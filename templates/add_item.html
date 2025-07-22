@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Add New Equipment - Inventory{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">
+                    <i class="fas fa-plus"></i> Add New Equipment
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_item_route') }}">
+                    <div class="row">
+                        <!-- Item Name -->
+                        <div class="col-md-6 mb-3">
+                            <label for="item_name" class="form-label">Item Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="item_name" name="item_name" required 
+                                   placeholder="Enter equipment name">
+                        </div>
+
+                        <!-- Category -->
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="category" name="category" required 
+                                   placeholder="e.g., Electronics, Tools, Furniture" list="categoryList">
+                            <datalist id="categoryList">
+                                <option value="Electronics">
+                                <option value="Tools">
+                                <option value="Furniture">
+                                <option value="Vehicles">
+                                <option value="Safety Equipment">
+                                <option value="IT Equipment">
+                                <option value="Office Supplies">
+                                <option value="Medical Equipment">
+                                <option value="Lab Equipment">
+                                <option value="Construction">
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" 
+                                  placeholder="Enter detailed description of the equipment"></textarea>
+                    </div>
+
+                    <div class="row">
+                        <!-- Quantity -->
+                        <div class="col-md-4 mb-3">
+                            <label for="quantity" class="form-label">Quantity <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="quantity" name="quantity" required 
+                                   min="0" placeholder="0">
+                        </div>
+
+                        <!-- Unit Price -->
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_price" class="form-label">Unit Price ($) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="unit_price" name="unit_price" required 
+                                   min="0" step="0.01" placeholder="0.00">
+                        </div>
+
+                        <!-- Minimum Stock -->
+                        <div class="col-md-4 mb-3">
+                            <label for="minimum_stock" class="form-label">Minimum Stock Level</label>
+                            <input type="number" class="form-control" id="minimum_stock" name="minimum_stock" 
+                                   min="0" placeholder="Optional">
+                            <div class="form-text">Alert when stock falls below this level</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- Supplier -->
+                        <div class="col-md-6 mb-3">
+                            <label for="supplier" class="form-label">Supplier</label>
+                            <input type="text" class="form-control" id="supplier" name="supplier" 
+                                   placeholder="Enter supplier name">
+                        </div>
+
+                        <!-- Location -->
+                        <div class="col-md-6 mb-3">
+                            <label for="location" class="form-label">Location</label>
+                            <input type="text" class="form-control" id="location" name="location" 
+                                   placeholder="e.g., Warehouse A, Room 101, Building B">
+                        </div>
+                    </div>
+
+                    <!-- Total Value Display -->
+                    <div class="mb-3">
+                        <div class="alert alert-info">
+                            <strong>Total Value: $<span id="totalValue">0.00</span></strong>
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to Inventory
+                        </a>
+                        <div>
+                            <button type="reset" class="btn btn-outline-secondary me-2">
+                                <i class="fas fa-undo"></i> Reset
+                            </button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save"></i> Add Item
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const quantityInput = document.getElementById('quantity');
+    const unitPriceInput = document.getElementById('unit_price');
+    const totalValueSpan = document.getElementById('totalValue');
+
+    function updateTotalValue() {
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const unitPrice = parseFloat(unitPriceInput.value) || 0;
+        const totalValue = quantity * unitPrice;
+        totalValueSpan.textContent = totalValue.toFixed(2);
+    }
+
+    quantityInput.addEventListener('input', updateTotalValue);
+    unitPriceInput.addEventListener('input', updateTotalValue);
+    
+    // Initialize total value calculation
+    updateTotalValue();
+});
+</script>
+{% endblock %} 

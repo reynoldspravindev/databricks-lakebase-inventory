@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Low Stock Alert - Inventory{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-exclamation-triangle text-warning"></i> Low Stock Alert</h1>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Inventory
+                </a>
+                <a href="{{ url_for('add_item_route') }}" class="btn btn-success ms-2">
+                    <i class="fas fa-plus"></i> Add New Item
+                </a>
+            </div>
+        </div>
+
+        {% if items %}
+            <!-- Alert Banner -->
+            <div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                <div>
+                    <h5 class="alert-heading">Stock Alert!</h5>
+                    <p class="mb-0">{{ items|length }} item{{ 's' if items|length != 1 else '' }} 
+                    {% if items|length == 1 %}has{% else %}have{% endif %} reached or fallen below the minimum stock level.</p>
+                </div>
+            </div>
+
+            <!-- Low Stock Items Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Items Requiring Attention</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                                                         <thead>
+                                 <tr>
+                                     <th>Item Name</th>
+                                     <th>Category</th>
+                                     <th>Current Stock</th>
+                                     <th>Minimum Stock</th>
+                                     <th>Shortage</th>
+                                     <th>Supplier</th>
+                                     <th>Location</th>
+                                     <th>Last Updated</th>
+                                     <th>Actions</th>
+                                 </tr>
+                             </thead>
+                            <tbody>
+                                {% for item in items %}
+                                    {% set is_out_of_stock = item[4] == 0 %}
+                                    {% set shortage = item[8] - item[4] if item[8] else 0 %}
+                                    <tr class="{% if is_out_of_stock %}out-of-stock{% else %}low-stock{% endif %}">
+                                        <td>
+                                            <strong>{{ item[1] }}</strong>
+                                            {% if item[2] %}
+                                                <br><small class="text-muted">{{ item[2][:50] }}{% if item[2]|length > 50 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ item[3] }}</td>
+                                        <td>
+                                            <span class="badge {% if is_out_of_stock %}bg-danger{% else %}bg-warning{% endif %} fs-6">
+                                                {{ item[4] }}
+                                            </span>
+                                        </td>
+                                        <td>{{ item[8] }}</td>
+                                        <td>
+                                            {% if shortage > 0 %}
+                                                <span class="badge bg-danger">-{{ shortage }}</span>
+                                            {% else %}
+                                                <span class="badge bg-success">OK</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item[6] %}
+                                                <strong>{{ item[6] }}</strong>
+                                            {% else %}
+                                                <span class="text-muted">No supplier</span>
+                                            {% endif %}
+                                        </td>
+                                                                                 <td>{{ item[7] or '-' }}</td>
+                                         <td>
+                                             <small class="text-muted">
+                                                 {% if item[10] %}
+                                                     {{ item[10].strftime('%Y-%m-%d') }}<br>
+                                                     <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
+                                                 {% else %}
+                                                     <span class="text-muted">Never</span>
+                                                 {% endif %}
+                                             </small>
+                                         </td>
+                                         <td>
+                                             <div class="btn-group" role="group">
+                                                 <a href="{{ url_for('edit_item_route', item_id=item[0]) }}" 
+                                                    class="btn btn-sm btn-outline-primary" title="Update Stock">
+                                                     <i class="fas fa-edit"></i> Update
+                                                 </a>
+                                                 {% if item[6] %}
+                                                     <button type="button" class="btn btn-sm btn-outline-success reorder-btn" 
+                                                             title="Quick reorder suggestion"
+                                                             data-item-name="{{ item[1] }}"
+                                                             data-supplier="{{ item[6] }}"
+                                                             data-quantity="{{ shortage if shortage > 0 else item[8] }}">
+                                                         <i class="fas fa-shopping-cart"></i> Reorder
+                                                     </button>
+                                                 {% endif %}
+                                             </div>
+                                         </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Action Suggestions -->
+                    <div class="mt-4">
+                        <h6>Recommended Actions:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success"></i> Contact suppliers for items with critical shortages</li>
+                            <li><i class="fas fa-check text-success"></i> Update stock quantities after receiving new inventory</li>
+                            <li><i class="fas fa-check text-success"></i> Consider adjusting minimum stock levels based on usage patterns</li>
+                            <li><i class="fas fa-check text-success"></i> Set up automated reorder points for frequently used items</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Statistics -->
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="card text-center border-warning">
+                        <div class="card-body">
+                            <h5 class="card-title">Low Stock Items</h5>
+                            <h3 class="text-warning">{{ items|length }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center border-danger">
+                        <div class="card-body">
+                            <h5 class="card-title">Out of Stock</h5>
+                            <h3 class="text-danger">{{ items|selectattr(4, 'equalto', 0)|list|length }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center border-info">
+                        <div class="card-body">
+                            <h5 class="card-title">Items with Suppliers</h5>
+                            <h3 class="text-info">{{ items|selectattr(6, 'defined')|selectattr(6, 'ne', '')|list|length }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center border-secondary">
+                        <div class="card-body">
+                            <h5 class="card-title">Categories Affected</h5>
+                            <h3 class="text-secondary">{{ items|map(attribute=3)|unique|list|length }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- No Low Stock Items -->
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-check-circle fa-5x text-success mb-3"></i>
+                    <h3 class="text-success">All Stock Levels Are Good!</h3>
+                    <p class="text-muted">No items have fallen below their minimum stock levels.</p>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">
+                        <i class="fas fa-list"></i> View All Inventory
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Reorder Info Modal -->
+<div class="modal fade" id="reorderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reorder Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="reorderContent">
+                    <!-- Content will be populated by JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners to reorder buttons
+    document.querySelectorAll('.reorder-btn').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const itemName = this.getAttribute('data-item-name');
+            const supplier = this.getAttribute('data-supplier');
+            const quantity = this.getAttribute('data-quantity');
+            showReorderInfo(itemName, supplier, quantity);
+        });
+    });
+});
+
+function showReorderInfo(itemName, supplier, suggestedQuantity) {
+    const content = '<h6><i class="fas fa-box"></i> Item: ' + itemName + '</h6>' +
+        '<p><strong>Supplier:</strong> ' + supplier + '</p>' +
+        '<p><strong>Suggested Reorder Quantity:</strong> ' + suggestedQuantity + ' units</p>' +
+        '<div class="alert alert-info">' +
+        '<i class="fas fa-info-circle"></i> ' +
+        'Contact your supplier to place a new order for this item.' +
+        '</div>';
+    
+    document.getElementById('reorderContent').innerHTML = content;
+    new bootstrap.Modal(document.getElementById('reorderModal')).show();
+}
+</script>
+{% endblock %} 
