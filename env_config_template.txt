@@ -39,4 +39,4 @@ PORT=8080
 # export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
 # export DASHBOARD_ID="your-dashboard-uuid"
 # 
-# Then run: python app_with_csv.py 
+# Then run: python app.py
