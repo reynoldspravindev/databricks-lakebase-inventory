@@ -77,24 +77,9 @@ def init_database():
                 schema_name = get_schema_name()
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 
-                # Create schema
                 cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
-                
-                # Grant permissions on schema to current user
-                current_user = os.getenv('PGUSER')
-                if current_user:
-                    cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
-                        sql.Identifier(schema_name), 
-                        sql.Identifier(current_user)
-                    ))
-                    cur.execute(sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
-                        sql.Identifier(schema_name), 
-                        sql.Identifier(current_user)
-                    ))
-                
-                # Create table
                 cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.{} (
+                    CREATE TABLE IF NOT EXISTS {1}.{2} (
 	id serial4 NOT NULL,
 	item_name varchar(100) NOT NULL,
 	description text NULL,
@@ -106,75 +91,13 @@ def init_database():
 	minimum_stock int4 NULL,
 	date_added timestamp DEFAULT CURRENT_TIMESTAMP,
 	last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT {}_pkey PRIMARY KEY (id)
+	CONSTRAINT {2}_pkey PRIMARY KEY (id)
 );
-                """).format(sql.Identifier(schema_name), sql.Identifier(table_name), sql.Identifier(table_name)))
-                
-                # Grant permissions on table to current user
-                if current_user:
-                    cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON TABLE {}.{} TO {}").format(
-                        sql.Identifier(schema_name),
-                        sql.Identifier(table_name),
-                        sql.Identifier(current_user)
-                    ))
-                    # Grant usage on sequence for serial primary key
-                    cur.execute(sql.SQL("GRANT USAGE, SELECT ON SEQUENCE {}.{}_id_seq TO {}").format(
-                        sql.Identifier(schema_name),
-                        sql.Identifier(table_name),
-                        sql.Identifier(current_user)
-                    ))
-                
+                """).format(sql.Identifier(schema_name), sql.Identifier(table_name)))
                 conn.commit()
                 return True
     except Exception as e:
         print(f"Database initialization error: {e}")
-        return False
-
-def fix_schema_permissions():
-    """Fix schema and table permissions for the current user."""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                schema_name = get_schema_name()
-                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
-                current_user = os.getenv('PGUSER')
-                
-                if not current_user:
-                    print("❌ PGUSER environment variable not set")
-                    return False
-                
-                print(f"🔧 Fixing permissions for user '{current_user}' on schema '{schema_name}'...")
-                
-                # Grant schema permissions
-                cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
-                    sql.Identifier(schema_name), 
-                    sql.Identifier(current_user)
-                ))
-                cur.execute(sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
-                    sql.Identifier(schema_name), 
-                    sql.Identifier(current_user)
-                ))
-                
-                # Grant table permissions
-                cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON TABLE {}.{} TO {}").format(
-                    sql.Identifier(schema_name),
-                    sql.Identifier(table_name),
-                    sql.Identifier(current_user)
-                ))
-                
-                # Grant sequence permissions
-                cur.execute(sql.SQL("GRANT USAGE, SELECT ON SEQUENCE {}.{}_id_seq TO {}").format(
-                    sql.Identifier(schema_name),
-                    sql.Identifier(table_name),
-                    sql.Identifier(current_user)
-                ))
-                
-                conn.commit()
-                print("✅ Permissions fixed successfully!")
-                return True
-                
-    except Exception as e:
-        print(f"❌ Error fixing permissions: {e}")
         return False
 
 def add_inventory_item(item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
@@ -480,9 +403,6 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 # Initialize database
 if not init_database():
     print("Failed to initialize database")
-    # Try to fix permissions if initialization failed
-    print("Attempting to fix permissions...")
-    fix_schema_permissions()
 
 @app.route('/')
 def index():
@@ -700,21 +620,6 @@ def api_dashboard_config():
         'public_url': get_dashboard_public_url(),
         'configured': get_dashboard_embed_url() is not None
     })
-
-@app.route('/api/fix-permissions')
-def api_fix_permissions():
-    """API endpoint to manually fix database permissions."""
-    try:
-        success = fix_schema_permissions()
-        return jsonify({
-            'success': success,
-            'message': 'Permissions fixed successfully!' if success else 'Failed to fix permissions'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Error fixing permissions: {str(e)}'
-        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 8080))) 
