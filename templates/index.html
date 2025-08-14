@@ -1,12 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Equipment Inventory - Dashboard{% endblock %}
+{% block title %}{{ flavor_config.name if flavor_config else 'Equipment' }} Inventory - Dashboard{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-boxes"></i> Equipment Inventory</h1>
+            <h1>
+                {% if flavor_config %}
+                    <i class="{{ flavor_config.icon }}"></i> {{ flavor_config.name }} Inventory
+                    <br><small class="text-muted">{{ flavor_config.description }}</small>
+                {% else %}
+                    <i class="fas fa-boxes"></i> Equipment Inventory
+                {% endif %}
+            </h1>
             <div>
                 <a href="{{ url_for('add_item_route') }}" class="btn btn-success">
                     <i class="fas fa-plus"></i> Add New Item

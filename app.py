@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 import psycopg
 import os
 import time
@@ -9,6 +9,11 @@ from databricks import sdk
 from psycopg import sql
 from psycopg_pool import ConnectionPool
 from werkzeug.utils import secure_filename
+from flavor_config import (
+    get_flavor_config, get_available_flavors, get_categories_for_flavor,
+    get_fields_for_flavor, get_unit_labels_for_flavor, get_sample_data_for_flavor,
+    validate_flavor, get_default_flavor
+)
 
 # Database connection setup
 workspace_client = sdk.WorkspaceClient()
@@ -69,49 +74,86 @@ def get_connection():
 def get_schema_name():
     return os.getenv("POSTGRES_SCHEMA", "inventory_app")
 
+def get_current_flavor():
+    """Get current flavor from session or default."""
+    return session.get('current_flavor', get_default_flavor())
+
+def set_current_flavor(flavor):
+    """Set current flavor in session."""
+    if validate_flavor(flavor):
+        session['current_flavor'] = flavor
+        return True
+    return False
+
+def get_flavor_table_name():
+    """Get flavor-specific table name."""
+    flavor = get_current_flavor()
+    base_table = os.getenv("POSTGRES_TABLE", "inventory_items")
+    return f"{base_table}_{flavor}"
+
 def init_database():
-    """Initialize database schema and table."""
+    """Initialize database schema and tables for all flavors."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema_name = get_schema_name()
-                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                base_table = os.getenv("POSTGRES_TABLE", "inventory_items")
                 
+                # Create schema
                 cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {1}.{2} (
-	id serial4 NOT NULL,
-	item_name varchar(100) NOT NULL,
-	description text NULL,
-	category varchar(50) NOT NULL,
-	quantity int4 NOT NULL,
-	unit_price float8 NOT NULL,
-	supplier varchar(100) NULL,
-	"location" varchar(100) NULL,
-	minimum_stock int4 NULL,
-	date_added timestamp DEFAULT CURRENT_TIMESTAMP,
-	last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT {2}_pkey PRIMARY KEY (id)
-);
-                """).format(sql.Identifier(schema_name), sql.Identifier(table_name)))
+                
+                # Create tables for each flavor
+                flavors = get_available_flavors()
+                for flavor_key, flavor_name in flavors:
+                    table_name = f"{base_table}_{flavor_key}"
+                    cur.execute(sql.SQL("""
+                        CREATE TABLE IF NOT EXISTS {}.{} (
+                            id serial4 NOT NULL,
+                            item_name varchar(100) NOT NULL,
+                            description text NULL,
+                            category varchar(50) NOT NULL,
+                            quantity int4 NOT NULL,
+                            unit_price float8 NOT NULL,
+                            supplier varchar(100) NULL,
+                            "location" varchar(100) NULL,
+                            minimum_stock int4 NULL,
+                            flavor varchar(20) DEFAULT %s,
+                            date_added timestamp DEFAULT CURRENT_TIMESTAMP,
+                            last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+                            CONSTRAINT {}_pkey PRIMARY KEY (id)
+                        );
+                    """).format(sql.Identifier(schema_name), sql.Identifier(table_name), sql.Identifier(table_name)), (flavor_key,))
+                    
+                    # Create indexes separately
+                    cur.execute(sql.SQL("""
+                        CREATE INDEX IF NOT EXISTS idx_{}_flavor ON {}.{} (flavor);
+                    """).format(sql.Identifier(table_name), sql.Identifier(schema_name), sql.Identifier(table_name)))
+                    
+                    cur.execute(sql.SQL("""
+                        CREATE INDEX IF NOT EXISTS idx_{}_category ON {}.{} (category);
+                    """).format(sql.Identifier(table_name), sql.Identifier(schema_name), sql.Identifier(table_name)))
+                
                 conn.commit()
+                print(f"✅ Database initialized with tables for flavors: {[f[0] for f in flavors]}")
                 return True
     except Exception as e:
         print(f"Database initialization error: {e}")
         return False
 
 def add_inventory_item(item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
-    """Add a new inventory item."""
+    """Add a new inventory item to the current flavor table."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = get_flavor_table_name()
+                flavor = get_current_flavor()
                 cur.execute(sql.SQL("""
-                    INSERT INTO {}.inventory_items 
-                    (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """).format(sql.Identifier(schema)), 
-                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()))
+                    INSERT INTO {}.{} 
+                    (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, date_added, last_updated) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)), 
+                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, datetime.now(), datetime.now()))
                 conn.commit()
                 return True
     except Exception as e:
@@ -119,18 +161,19 @@ def add_inventory_item(item_name, description, category, quantity, unit_price, s
         return False
 
 def add_inventory_items_bulk(items_data):
-    """Add multiple inventory items in bulk."""
+    """Add multiple inventory items in bulk to current flavor table."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = get_flavor_table_name()
                 
                 # Prepare the bulk insert
                 insert_query = sql.SQL("""
-                    INSERT INTO {}.inventory_items 
-                    (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """).format(sql.Identifier(schema))
+                    INSERT INTO {}.{} 
+                    (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, date_added, last_updated) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(table_name))
                 
                 # Execute bulk insert
                 cur.executemany(insert_query, items_data)
@@ -248,7 +291,9 @@ def process_csv_file(file_content):
             item_data, row_errors = validate_csv_row(row, row_num)
             
             if item_data:
-                valid_items.append(item_data)
+                # Add flavor to the item data
+                item_with_flavor = item_data + (get_current_flavor(),)
+                valid_items.append(item_with_flavor)
             else:
                 all_errors.extend(row_errors)
         
@@ -271,47 +316,50 @@ def process_csv_file(file_content):
         }
 
 def get_inventory_items():
-    """Get all inventory items."""
+    """Get all inventory items for current flavor."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = get_flavor_table_name()
                 cur.execute(sql.SQL("""
                     SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                    FROM {}.inventory_items ORDER BY item_name ASC
-                """).format(sql.Identifier(schema)))
+                    FROM {}.{} ORDER BY item_name ASC
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)))
                 return cur.fetchall()
     except Exception as e:
         print(f"Get inventory items error: {e}")
         return []
 
 def get_inventory_item(item_id):
-    """Get a specific inventory item by ID."""
+    """Get a specific inventory item by ID from current flavor table."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = get_flavor_table_name()
                 cur.execute(sql.SQL("""
                     SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                    FROM {}.inventory_items WHERE id = %s
-                """).format(sql.Identifier(schema)), (item_id,))
+                    FROM {}.{} WHERE id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)), (item_id,))
                 return cur.fetchone()
     except Exception as e:
         print(f"Get inventory item error: {e}")
         return None
 
 def update_inventory_item(item_id, item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
-    """Update an existing inventory item."""
+    """Update an existing inventory item in current flavor table."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = get_flavor_table_name()
                 cur.execute(sql.SQL("""
-                    UPDATE {}.inventory_items 
+                    UPDATE {}.{} 
                     SET item_name = %s, description = %s, category = %s, quantity = %s, unit_price = %s, 
                         supplier = %s, location = %s, minimum_stock = %s, last_updated = %s
                     WHERE id = %s
-                """).format(sql.Identifier(schema)), 
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)), 
                 (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), item_id))
                 conn.commit()
                 return True
@@ -320,12 +368,13 @@ def update_inventory_item(item_id, item_name, description, category, quantity, u
         return False
 
 def delete_inventory_item(item_id):
-    """Delete an inventory item."""
+    """Delete an inventory item from current flavor table."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
-                cur.execute(sql.SQL("DELETE FROM {}.inventory_items WHERE id = %s").format(sql.Identifier(schema)), (item_id,))
+                table_name = get_flavor_table_name()
+                cur.execute(sql.SQL("DELETE FROM {}.{} WHERE id = %s").format(sql.Identifier(schema), sql.Identifier(table_name)), (item_id,))
                 conn.commit()
                 return True
     except Exception as e:
@@ -333,21 +382,42 @@ def delete_inventory_item(item_id):
         return False
 
 def get_low_stock_items():
-    """Get items with quantity at or below minimum stock level."""
+    """Get items with quantity at or below minimum stock level for current flavor."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = get_flavor_table_name()
                 cur.execute(sql.SQL("""
                     SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                    FROM {}.inventory_items 
+                    FROM {}.{} 
                     WHERE minimum_stock IS NOT NULL AND quantity <= minimum_stock
                     ORDER BY (quantity - minimum_stock) ASC
-                """).format(sql.Identifier(schema)))
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)))
                 return cur.fetchall()
     except Exception as e:
         print(f"Get low stock items error: {e}")
         return []
+
+def populate_sample_data_for_flavor(flavor_key):
+    """Populate sample data for a specific flavor."""
+    try:
+        sample_data = get_sample_data_for_flavor(flavor_key)
+        items_with_flavor = []
+        now = datetime.now()
+        
+        for item in sample_data:
+            item_with_timestamps = item + (flavor_key, now, now)
+            items_with_flavor.append(item_with_timestamps)
+        
+        success, count = add_inventory_items_bulk(items_with_flavor)
+        if success:
+            print(f"✅ Added {count} sample items for {flavor_key} flavor")
+            return True
+        return False
+    except Exception as e:
+        print(f"Error populating sample data for {flavor_key}: {e}")
+        return False
 
 def get_dashboard_embed_url():
     """Generate dashboard embed URL with proper authentication."""
@@ -400,20 +470,69 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
+# Make flavor functions available in templates
+app.jinja_env.globals.update(get_flavor_config=get_flavor_config)
+
 # Initialize database
 if not init_database():
     print("Failed to initialize database")
+else:
+    # Check if we need to populate sample data for any flavor
+    flavors = get_available_flavors()
+    for flavor_key, flavor_name in flavors:
+        # Set temporary flavor to check if table is empty
+        temp_session = {'current_flavor': flavor_key}
+        with app.test_request_context():
+            session.update(temp_session)
+            items = get_inventory_items()
+            if not items:
+                print(f"📦 Adding sample data for {flavor_name}...")
+                populate_sample_data_for_flavor(flavor_key)
+
+@app.route('/set-flavor/<flavor>')
+def set_flavor_route(flavor):
+    """Set the current industry flavor."""
+    if set_current_flavor(flavor):
+        flash(f'Switched to {get_flavor_config(flavor)["name"]} inventory', 'success')
+    else:
+        flash('Invalid flavor selected', 'error')
+    return redirect(url_for('index'))
+
+@app.route('/populate-sample-data')
+def populate_sample_data_route():
+    """Populate sample data for current flavor (admin function)."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
+    
+    if populate_sample_data_for_flavor(current_flavor):
+        flash(f'Sample data added for {flavor_config["name"]} inventory!', 'success')
+    else:
+        flash('Failed to add sample data.', 'error')
+    
+    return redirect(url_for('index'))
 
 @app.route('/')
 def index():
     """Main page showing all inventory items."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
     items = get_inventory_items()
     low_stock_items = get_low_stock_items()
-    return render_template('index.html', items=items, low_stock_count=len(low_stock_items))
+    available_flavors = get_available_flavors()
+    
+    return render_template('index.html', 
+                         items=items, 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         available_flavors=available_flavors)
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_item_route():
     """Add a new inventory item."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
+    
     if request.method == 'POST':
         item_name = request.form.get('item_name', '').strip()
         description = request.form.get('description', '').strip()
@@ -434,11 +553,26 @@ def add_item_route():
         return redirect(url_for('index'))
     
     low_stock_items = get_low_stock_items()
-    return render_template('add_item.html', low_stock_count=len(low_stock_items))
+    categories = get_categories_for_flavor(current_flavor)
+    fields = get_fields_for_flavor(current_flavor)
+    unit_labels = get_unit_labels_for_flavor(current_flavor)
+    available_flavors = get_available_flavors()
+    
+    return render_template('add_item.html', 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         categories=categories,
+                         fields=fields,
+                         unit_labels=unit_labels,
+                         available_flavors=available_flavors)
 
 @app.route('/upload-csv', methods=['GET', 'POST'])
 def upload_csv_route():
     """Upload CSV file to add multiple inventory items."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
+    
     if request.method == 'POST':
         # Check if file was uploaded
         if 'csv_file' not in request.files:
@@ -500,29 +634,48 @@ def upload_csv_route():
         return redirect(url_for('upload_csv_route'))
     
     low_stock_items = get_low_stock_items()
-    return render_template('upload_csv.html', low_stock_count=len(low_stock_items))
+    available_flavors = get_available_flavors()
+    
+    return render_template('upload_csv.html', 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         available_flavors=available_flavors)
 
 @app.route('/download-template')
 def download_template():
-    """Download CSV template file."""
+    """Download flavor-specific CSV template file."""
     from flask import Response
     
-    # Create CSV template content
-    template_content = """item_name,description,category,quantity,unit_price,supplier,location,minimum_stock
-"Laptop - Example Model","High-performance laptop for office use","Electronics",5,1299.99,"Tech Supplier Co.","IT Storage Room",2
-"Office Desk","Adjustable height standing desk","Furniture",10,399.50,"Office Furniture Ltd.","Warehouse A",3
-"Safety Helmet","OSHA approved construction helmet","Safety Equipment",25,29.99,"Safety First Inc.","Safety Storage",10"""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
+    sample_data = get_sample_data_for_flavor(current_flavor)
+    
+    # Create CSV header
+    header = "item_name,description,category,quantity,unit_price,supplier,location,minimum_stock\n"
+    
+    # Add sample rows from flavor config
+    rows = []
+    for item in sample_data[:3]:  # Take first 3 sample items
+        row = f'"{item[0]}","{item[1]}","{item[2]}",{item[3]},{item[4]},"{item[5]}","{item[6]}",{item[7]}'
+        rows.append(row)
+    
+    template_content = header + "\n".join(rows)
+    filename = f'inventory_template_{current_flavor}.csv'
     
     return Response(
         template_content,
         mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=inventory_template.csv'}
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
     )
 
 @app.route('/edit/<int:item_id>', methods=['GET', 'POST'])
 def edit_item_route(item_id):
     """Edit an existing inventory item."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
     item = get_inventory_item(item_id)
+    
     if not item:
         flash('Item not found.', 'error')
         return redirect(url_for('index'))
@@ -547,7 +700,20 @@ def edit_item_route(item_id):
         return redirect(url_for('index'))
     
     low_stock_items = get_low_stock_items()
-    return render_template('edit_item.html', item=item, low_stock_count=len(low_stock_items))
+    categories = get_categories_for_flavor(current_flavor)
+    fields = get_fields_for_flavor(current_flavor)
+    unit_labels = get_unit_labels_for_flavor(current_flavor)
+    available_flavors = get_available_flavors()
+    
+    return render_template('edit_item.html', 
+                         item=item, 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         categories=categories,
+                         fields=fields,
+                         unit_labels=unit_labels,
+                         available_flavors=available_flavors)
 
 @app.route('/delete/<int:item_id>')
 def delete_item_route(item_id):
@@ -561,15 +727,27 @@ def delete_item_route(item_id):
 @app.route('/low-stock')
 def low_stock_route():
     """Show items with low stock."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
     low_stock_items = get_low_stock_items()
-    return render_template('low_stock.html', items=low_stock_items, low_stock_count=len(low_stock_items))
+    available_flavors = get_available_flavors()
+    
+    return render_template('low_stock.html', 
+                         items=low_stock_items, 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         available_flavors=available_flavors)
 
 @app.route('/dashboard')
 def dashboard_route():
     """Display embedded Databricks AI/BI dashboard."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
     dashboard_embed_url = get_dashboard_embed_url()
     dashboard_url = get_dashboard_public_url()
     low_stock_items = get_low_stock_items()
+    available_flavors = get_available_flavors()
     
     if not dashboard_embed_url:
         flash('Dashboard not configured. Please set DASHBOARD_ID environment variable.', 'warning')
@@ -578,7 +756,10 @@ def dashboard_route():
     return render_template('dashboard.html', 
                          dashboard_embed_url=dashboard_embed_url,
                          dashboard_url=dashboard_url,
-                         low_stock_count=len(low_stock_items))
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         available_flavors=available_flavors)
 
 @app.route('/api/items')
 def api_items():

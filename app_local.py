@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response, session
 import sqlite3
 import os
 import csv
@@ -6,6 +6,11 @@ import io
 from datetime import datetime
 from contextlib import contextmanager
 from werkzeug.utils import secure_filename
+from flavor_config import (
+    get_flavor_config, get_available_flavors, get_categories_for_flavor,
+    get_fields_for_flavor, get_unit_labels_for_flavor, get_sample_data_for_flavor,
+    validate_flavor, get_default_flavor
+)
 
 # Database setup for local development
 DATABASE = 'inventory.db'
@@ -18,6 +23,22 @@ def allowed_file(filename):
     """Check if uploaded file is allowed."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def get_current_flavor():
+    """Get current flavor from session or default."""
+    return session.get('current_flavor', get_default_flavor())
+
+def set_current_flavor(flavor):
+    """Set current flavor in session."""
+    if validate_flavor(flavor):
+        session['current_flavor'] = flavor
+        return True
+    return False
+
+def get_flavor_table_name():
+    """Get flavor-specific table name."""
+    flavor = get_current_flavor()
+    return f"inventory_items_{flavor}"
+
 @contextmanager
 def get_db():
     """Get database connection with context manager."""
@@ -29,40 +50,53 @@ def get_db():
         conn.close()
 
 def init_database():
-    """Initialize database schema and table."""
+    """Initialize database schema and tables for all flavors."""
     try:
         with get_db() as conn:
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS inventory_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_name TEXT NOT NULL,
-                    description TEXT,
-                    category TEXT NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    unit_price REAL NOT NULL,
-                    supplier TEXT,
-                    location TEXT,
-                    minimum_stock INTEGER,
-                    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+            # Create tables for each flavor
+            flavors = get_available_flavors()
+            for flavor_key, flavor_name in flavors:
+                table_name = f"inventory_items_{flavor_key}"
+                conn.execute(f'''
+                    CREATE TABLE IF NOT EXISTS {table_name} (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        item_name TEXT NOT NULL,
+                        description TEXT,
+                        category TEXT NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        unit_price REAL NOT NULL,
+                        supplier TEXT,
+                        location TEXT,
+                        minimum_stock INTEGER,
+                        flavor TEXT DEFAULT '{flavor_key}',
+                        date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                # Create indexes
+                conn.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_flavor ON {table_name} (flavor)')
+                conn.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_category ON {table_name} (category)')
+            
             conn.commit()
+            print(f"✅ Database initialized with tables for flavors: {[f[0] for f in flavors]}")
             return True
     except Exception as e:
         print(f"Database initialization error: {e}")
         return False
 
 def add_inventory_item(item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
-    """Add a new inventory item."""
+    """Add a new inventory item to current flavor table."""
     try:
         with get_db() as conn:
+            table_name = get_flavor_table_name()
+            flavor = get_current_flavor()
             now = datetime.now().isoformat()
-            conn.execute('''
-                INSERT INTO inventory_items 
-                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, now, now))
+            conn.execute(f'''
+                INSERT INTO {table_name} 
+                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, date_added, last_updated) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, now, now))
             conn.commit()
             return True
     except Exception as e:
@@ -70,14 +104,15 @@ def add_inventory_item(item_name, description, category, quantity, unit_price, s
         return False
 
 def add_inventory_items_bulk(items_data):
-    """Add multiple inventory items in bulk."""
+    """Add multiple inventory items in bulk to current flavor table."""
     try:
         with get_db() as conn:
+            table_name = get_flavor_table_name()
             # Execute bulk insert
-            conn.executemany('''
-                INSERT INTO inventory_items 
-                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            conn.executemany(f'''
+                INSERT INTO {table_name} 
+                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, date_added, last_updated) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', items_data)
             conn.commit()
             return True, len(items_data)
@@ -147,7 +182,8 @@ def validate_csv_row(row, row_num):
         return None, errors
     
     now = datetime.now().isoformat()
-    return (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, now, now), []
+    flavor = get_current_flavor()
+    return (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, flavor, now, now), []
 
 def process_csv_file(file_content):
     """Process uploaded CSV file and return results."""
@@ -217,12 +253,13 @@ def process_csv_file(file_content):
         }
 
 def get_inventory_items():
-    """Get all inventory items."""
+    """Get all inventory items for current flavor."""
     try:
         with get_db() as conn:
-            cursor = conn.execute('''
+            table_name = get_flavor_table_name()
+            cursor = conn.execute(f'''
                 SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                FROM inventory_items ORDER BY item_name ASC
+                FROM {table_name} ORDER BY item_name ASC
             ''')
             items = cursor.fetchall()
             # Convert timestamp strings to datetime objects
@@ -246,12 +283,13 @@ def get_inventory_items():
         return []
 
 def get_inventory_item(item_id):
-    """Get a specific inventory item by ID."""
+    """Get a specific inventory item by ID from current flavor table."""
     try:
         with get_db() as conn:
-            cursor = conn.execute('''
+            table_name = get_flavor_table_name()
+            cursor = conn.execute(f'''
                 SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                FROM inventory_items WHERE id = ?
+                FROM {table_name} WHERE id = ?
             ''', (item_id,))
             item = cursor.fetchone()
             if item:
@@ -273,12 +311,13 @@ def get_inventory_item(item_id):
         return None
 
 def update_inventory_item(item_id, item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
-    """Update an existing inventory item."""
+    """Update an existing inventory item in current flavor table."""
     try:
         with get_db() as conn:
+            table_name = get_flavor_table_name()
             now = datetime.now().isoformat()
-            conn.execute('''
-                UPDATE inventory_items 
+            conn.execute(f'''
+                UPDATE {table_name} 
                 SET item_name = ?, description = ?, category = ?, quantity = ?, unit_price = ?, 
                     supplier = ?, location = ?, minimum_stock = ?, last_updated = ?
                 WHERE id = ?
@@ -290,10 +329,11 @@ def update_inventory_item(item_id, item_name, description, category, quantity, u
         return False
 
 def delete_inventory_item(item_id):
-    """Delete an inventory item."""
+    """Delete an inventory item from current flavor table."""
     try:
         with get_db() as conn:
-            conn.execute("DELETE FROM inventory_items WHERE id = ?", (item_id,))
+            table_name = get_flavor_table_name()
+            conn.execute(f"DELETE FROM {table_name} WHERE id = ?", (item_id,))
             conn.commit()
             return True
     except Exception as e:
@@ -301,12 +341,13 @@ def delete_inventory_item(item_id):
         return False
 
 def get_low_stock_items():
-    """Get items with quantity at or below minimum stock level."""
+    """Get items with quantity at or below minimum stock level for current flavor."""
     try:
         with get_db() as conn:
-            cursor = conn.execute('''
+            table_name = get_flavor_table_name()
+            cursor = conn.execute(f'''
                 SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                FROM inventory_items 
+                FROM {table_name} 
                 WHERE minimum_stock IS NOT NULL AND quantity <= minimum_stock
                 ORDER BY (quantity - minimum_stock) ASC
             ''')
@@ -331,6 +372,26 @@ def get_low_stock_items():
         print(f"Get low stock items error: {e}")
         return []
 
+def populate_sample_data_for_flavor(flavor_key):
+    """Populate sample data for a specific flavor."""
+    try:
+        sample_data = get_sample_data_for_flavor(flavor_key)
+        items_with_flavor = []
+        now = datetime.now().isoformat()
+        
+        for item in sample_data:
+            item_with_timestamps = item + (flavor_key, now, now)
+            items_with_flavor.append(item_with_timestamps)
+        
+        success, count = add_inventory_items_bulk(items_with_flavor)
+        if success:
+            print(f"✅ Added {count} sample items for {flavor_key} flavor")
+            return True
+        return False
+    except Exception as e:
+        print(f"Error populating sample data for {flavor_key}: {e}")
+        return False
+
 def add_sample_data():
     """Add sample data for demonstration."""
     sample_items = [
@@ -351,28 +412,70 @@ app = Flask(__name__)
 app.secret_key = 'dev-secret-key-for-local-testing'
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
+# Make flavor functions available in templates
+app.jinja_env.globals.update(get_flavor_config=get_flavor_config)
+
 # Initialize database
 if not init_database():
     print("Failed to initialize database")
 else:
     print("✅ Database initialized successfully!")
-    # Check if we need to add sample data
-    items = get_inventory_items()
-    if not items:
-        print("📦 Adding sample data...")
-        add_sample_data()
-        print("✅ Sample data added!")
+    # Check if we need to populate sample data for any flavor
+    flavors = get_available_flavors()
+    for flavor_key, flavor_name in flavors:
+        # Set temporary flavor to check if table is empty
+        temp_session = {'current_flavor': flavor_key}
+        with app.test_request_context():
+            session.update(temp_session)
+            items = get_inventory_items()
+            if not items:
+                print(f"📦 Adding sample data for {flavor_name}...")
+                populate_sample_data_for_flavor(flavor_key)
+
+@app.route('/set-flavor/<flavor>')
+def set_flavor_route(flavor):
+    """Set the current industry flavor."""
+    if set_current_flavor(flavor):
+        flash(f'Switched to {get_flavor_config(flavor)["name"]} inventory', 'success')
+    else:
+        flash('Invalid flavor selected', 'error')
+    return redirect(url_for('index'))
+
+@app.route('/populate-sample-data')
+def populate_sample_data_route():
+    """Populate sample data for current flavor (admin function)."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
+    
+    if populate_sample_data_for_flavor(current_flavor):
+        flash(f'Sample data added for {flavor_config["name"]} inventory!', 'success')
+    else:
+        flash('Failed to add sample data.', 'error')
+    
+    return redirect(url_for('index'))
 
 @app.route('/')
 def index():
     """Main page showing all inventory items."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
     items = get_inventory_items()
     low_stock_items = get_low_stock_items()
-    return render_template('index.html', items=items, low_stock_count=len(low_stock_items))
+    available_flavors = get_available_flavors()
+    
+    return render_template('index.html', 
+                         items=items, 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         available_flavors=available_flavors)
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_item_route():
     """Add a new inventory item."""
+    current_flavor = get_current_flavor()
+    flavor_config = get_flavor_config(current_flavor)
+    
     if request.method == 'POST':
         item_name = request.form.get('item_name', '').strip()
         description = request.form.get('description', '').strip()
@@ -393,7 +496,19 @@ def add_item_route():
         return redirect(url_for('index'))
     
     low_stock_items = get_low_stock_items()
-    return render_template('add_item.html', low_stock_count=len(low_stock_items))
+    categories = get_categories_for_flavor(current_flavor)
+    fields = get_fields_for_flavor(current_flavor)
+    unit_labels = get_unit_labels_for_flavor(current_flavor)
+    available_flavors = get_available_flavors()
+    
+    return render_template('add_item.html', 
+                         low_stock_count=len(low_stock_items),
+                         current_flavor=current_flavor,
+                         flavor_config=flavor_config,
+                         categories=categories,
+                         fields=fields,
+                         unit_labels=unit_labels,
+                         available_flavors=available_flavors)
 
 @app.route('/upload-csv', methods=['GET', 'POST'])
 def upload_csv_route():

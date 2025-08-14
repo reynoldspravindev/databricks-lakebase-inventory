@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Add New Equipment - Inventory{% endblock %}
+{% block title %}Add New {{ flavor_config.name if flavor_config else 'Equipment' }} Item - Inventory{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,8 +8,15 @@
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title mb-0">
-                    <i class="fas fa-plus"></i> Add New Equipment
+                    {% if flavor_config %}
+                        <i class="{{ flavor_config.icon }}"></i> Add New {{ flavor_config.name }} Item
+                    {% else %}
+                        <i class="fas fa-plus"></i> Add New Equipment
+                    {% endif %}
                 </h3>
+                {% if flavor_config %}
+                    <small class="text-muted">{{ flavor_config.description }}</small>
+                {% endif %}
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('add_item_route') }}">
@@ -24,48 +31,71 @@
                         <!-- Category -->
                         <div class="col-md-6 mb-3">
                             <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="category" name="category" required 
-                                   placeholder="e.g., Electronics, Tools, Furniture" list="categoryList">
-                            <datalist id="categoryList">
-                                <option value="Electronics">
-                                <option value="Tools">
-                                <option value="Furniture">
-                                <option value="Vehicles">
-                                <option value="Safety Equipment">
-                                <option value="IT Equipment">
-                                <option value="Office Supplies">
-                                <option value="Medical Equipment">
-                                <option value="Lab Equipment">
-                                <option value="Construction">
-                            </datalist>
+                            {% if categories %}
+                                <select class="form-select" id="category" name="category" required>
+                                    <option value="">Select a category...</option>
+                                    {% for category in categories %}
+                                        <option value="{{ category }}">{{ category }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% else %}
+                                <input type="text" class="form-control" id="category" name="category" required 
+                                       placeholder="Enter category">
+                            {% endif %}
                         </div>
                     </div>
 
                     <!-- Description -->
                     <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
+                        <label for="description" class="form-label">
+                            {% if fields and fields.description %}
+                                {{ fields.description.label }}
+                            {% else %}
+                                Description
+                            {% endif %}
+                        </label>
                         <textarea class="form-control" id="description" name="description" rows="3" 
-                                  placeholder="Enter detailed description of the equipment"></textarea>
+                                  placeholder="{% if fields and fields.description %}Enter {{ fields.description.label.lower() }}{% else %}Enter detailed description of the equipment{% endif %}"></textarea>
                     </div>
 
                     <div class="row">
                         <!-- Quantity -->
                         <div class="col-md-4 mb-3">
-                            <label for="quantity" class="form-label">Quantity <span class="text-danger">*</span></label>
+                            <label for="quantity" class="form-label">
+                                {% if unit_labels and unit_labels.quantity %}
+                                    {{ unit_labels.quantity }}
+                                {% else %}
+                                    Quantity
+                                {% endif %}
+                                <span class="text-danger">*</span>
+                            </label>
                             <input type="number" class="form-control" id="quantity" name="quantity" required 
                                    min="0" placeholder="0">
                         </div>
 
                         <!-- Unit Price -->
                         <div class="col-md-4 mb-3">
-                            <label for="unit_price" class="form-label">Unit Price ($) <span class="text-danger">*</span></label>
+                            <label for="unit_price" class="form-label">
+                                {% if unit_labels and unit_labels.unit_price %}
+                                    {{ unit_labels.unit_price }}
+                                {% else %}
+                                    Unit Price ($)
+                                {% endif %}
+                                <span class="text-danger">*</span>
+                            </label>
                             <input type="number" class="form-control" id="unit_price" name="unit_price" required 
                                    min="0" step="0.01" placeholder="0.00">
                         </div>
 
                         <!-- Minimum Stock -->
                         <div class="col-md-4 mb-3">
-                            <label for="minimum_stock" class="form-label">Minimum Stock Level</label>
+                            <label for="minimum_stock" class="form-label">
+                                {% if fields and fields.minimum_stock %}
+                                    {{ fields.minimum_stock.label }}
+                                {% else %}
+                                    Minimum Stock Level
+                                {% endif %}
+                            </label>
                             <input type="number" class="form-control" id="minimum_stock" name="minimum_stock" 
                                    min="0" placeholder="Optional">
                             <div class="form-text">Alert when stock falls below this level</div>
@@ -75,16 +105,28 @@
                     <div class="row">
                         <!-- Supplier -->
                         <div class="col-md-6 mb-3">
-                            <label for="supplier" class="form-label">Supplier</label>
+                            <label for="supplier" class="form-label">
+                                {% if fields and fields.supplier %}
+                                    {{ fields.supplier.label }}
+                                {% else %}
+                                    Supplier
+                                {% endif %}
+                            </label>
                             <input type="text" class="form-control" id="supplier" name="supplier" 
-                                   placeholder="Enter supplier name">
+                                   placeholder="{% if fields and fields.supplier %}Enter {{ fields.supplier.label.lower() }}{% else %}Enter supplier name{% endif %}">
                         </div>
 
                         <!-- Location -->
                         <div class="col-md-6 mb-3">
-                            <label for="location" class="form-label">Location</label>
+                            <label for="location" class="form-label">
+                                {% if fields and fields.location %}
+                                    {{ fields.location.label }}
+                                {% else %}
+                                    Location
+                                {% endif %}
+                            </label>
                             <input type="text" class="form-control" id="location" name="location" 
-                                   placeholder="e.g., Warehouse A, Room 101, Building B">
+                                   placeholder="{% if fields and fields.location %}Enter {{ fields.location.label.lower() }}{% else %}e.g., Warehouse A, Room 101, Building B{% endif %}">
                         </div>
                     </div>
 
