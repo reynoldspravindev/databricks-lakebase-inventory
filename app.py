@@ -131,47 +131,96 @@ def init_database():
         return False
 
 def fix_schema_permissions():
-    """Fix schema and table permissions for the current user."""
+    """Fix schema and table permissions for the current user - OAuth compatible."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema_name = get_schema_name()
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
-                current_user = os.getenv('PGUSER')
                 
-                if not current_user:
-                    print("❌ PGUSER environment variable not set")
-                    return False
+                # Get detailed information about current session
+                cur.execute("SELECT current_user, session_user, current_database()")
+                user_info = cur.fetchone()
+                current_user = user_info[0]
+                session_user = user_info[1] 
+                current_db = user_info[2]
                 
-                print(f"🔧 Fixing permissions for user '{current_user}' on schema '{schema_name}'...")
+                print(f"🔍 Database: {current_db}")
+                print(f"🔍 Current user: {current_user}")
+                print(f"🔍 Session user: {session_user}")
+                print(f"🔍 PGUSER env var: {os.getenv('PGUSER', 'Not set')}")
                 
-                # Grant schema permissions
-                cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
-                    sql.Identifier(schema_name), 
-                    sql.Identifier(current_user)
-                ))
-                cur.execute(sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
-                    sql.Identifier(schema_name), 
-                    sql.Identifier(current_user)
-                ))
+                # Try to determine the best user to grant permissions to
+                target_user = current_user
                 
-                # Grant table permissions
-                cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON TABLE {}.{} TO {}").format(
-                    sql.Identifier(schema_name),
-                    sql.Identifier(table_name),
-                    sql.Identifier(current_user)
-                ))
+                # In OAuth scenarios, current_user might be different from PGUSER
+                pguser = os.getenv('PGUSER')
+                if pguser and pguser != current_user:
+                    print(f"🔍 PGUSER ({pguser}) differs from current_user ({current_user})")
+                    # Try granting to both users
+                    users_to_grant = [current_user, pguser]
+                else:
+                    users_to_grant = [current_user]
                 
-                # Grant sequence permissions
-                cur.execute(sql.SQL("GRANT USAGE, SELECT ON SEQUENCE {}.{}_id_seq TO {}").format(
-                    sql.Identifier(schema_name),
-                    sql.Identifier(table_name),
-                    sql.Identifier(current_user)
-                ))
+                success = False
+                for user in users_to_grant:
+                    try:
+                        print(f"🔧 Attempting to fix permissions for user '{user}' on schema '{schema_name}'...")
+                        
+                        # Grant schema permissions
+                        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
+                            sql.Identifier(schema_name), 
+                            sql.Identifier(user)
+                        ))
+                        cur.execute(sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
+                            sql.Identifier(schema_name), 
+                            sql.Identifier(user)
+                        ))
+                        
+                        # Grant table permissions
+                        cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON TABLE {}.{} TO {}").format(
+                            sql.Identifier(schema_name),
+                            sql.Identifier(table_name),
+                            sql.Identifier(user)
+                        ))
+                        
+                        # Grant sequence permissions
+                        cur.execute(sql.SQL("GRANT USAGE, SELECT ON SEQUENCE {}.{}_id_seq TO {}").format(
+                            sql.Identifier(schema_name),
+                            sql.Identifier(table_name),
+                            sql.Identifier(user)
+                        ))
+                        
+                        print(f"✅ Permissions granted to user '{user}'")
+                        success = True
+                        
+                    except Exception as user_error:
+                        print(f"⚠️ Could not grant permissions to user '{user}': {user_error}")
+                        continue
+                
+                # Also try to grant to PUBLIC as a fallback for OAuth scenarios
+                try:
+                    print(f"🔧 Attempting to grant basic permissions to PUBLIC as OAuth fallback...")
+                    cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO PUBLIC").format(
+                        sql.Identifier(schema_name)
+                    ))
+                    cur.execute(sql.SQL("GRANT SELECT ON TABLE {}.{} TO PUBLIC").format(
+                        sql.Identifier(schema_name),
+                        sql.Identifier(table_name)
+                    ))
+                    print("✅ Basic permissions granted to PUBLIC")
+                    success = True
+                except Exception as public_error:
+                    print(f"⚠️ Could not grant permissions to PUBLIC: {public_error}")
                 
                 conn.commit()
-                print("✅ Permissions fixed successfully!")
-                return True
+                
+                if success:
+                    print("✅ Permission fix completed successfully!")
+                    return True
+                else:
+                    print("❌ Could not fix permissions for any user")
+                    return False
                 
     except Exception as e:
         print(f"❌ Error fixing permissions: {e}")
@@ -424,6 +473,24 @@ def get_low_stock_items():
                 return cur.fetchall()
     except Exception as e:
         print(f"Get low stock items error: {e}")
+        # If permission error, try to fix permissions automatically
+        if "permission denied" in str(e).lower():
+            print("🔧 Detected permission error, attempting to fix permissions...")
+            if fix_schema_permissions():
+                print("✅ Permissions fixed, retrying query...")
+                try:
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            schema = get_schema_name()
+                            cur.execute(sql.SQL("""
+                                SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
+                                FROM {}.inventory_items 
+                                WHERE minimum_stock IS NOT NULL AND quantity <= minimum_stock
+                                ORDER BY (quantity - minimum_stock) ASC
+                            """).format(sql.Identifier(schema)))
+                            return cur.fetchall()
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
         return []
 
 def get_dashboard_embed_url():
@@ -714,6 +781,99 @@ def api_fix_permissions():
         return jsonify({
             'success': False,
             'message': f'Error fixing permissions: {str(e)}'
+        }), 500
+
+@app.route('/api/debug-oauth')
+def api_debug_oauth():
+    """API endpoint to debug OAuth authentication and permissions."""
+    try:
+        debug_info = {}
+        
+        # Get environment variables
+        debug_info['env'] = {
+            'PGUSER': os.getenv('PGUSER', 'Not set'),
+            'PGDATABASE': os.getenv('PGDATABASE', 'Not set'),
+            'PGHOST': os.getenv('PGHOST', 'Not set'),
+            'POSTGRES_SCHEMA': os.getenv('POSTGRES_SCHEMA', 'inventory_app'),
+            'POSTGRES_TABLE': os.getenv('POSTGRES_TABLE', 'inventory_items')
+        }
+        
+        # Get OAuth token info
+        debug_info['oauth'] = {
+            'token_set': postgres_password is not None,
+            'last_refresh': last_password_refresh,
+            'token_expired': is_token_expired()
+        }
+        
+        # Try to get database connection info
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Get user and database info
+                    cur.execute("SELECT current_user, session_user, current_database(), version()")
+                    user_info = cur.fetchone()
+                    
+                    debug_info['database'] = {
+                        'current_user': user_info[0],
+                        'session_user': user_info[1],
+                        'current_database': user_info[2],
+                        'postgres_version': user_info[3]
+                    }
+                    
+                    # Check schema existence and permissions
+                    schema_name = get_schema_name()
+                    cur.execute(sql.SQL("""
+                        SELECT schema_name 
+                        FROM information_schema.schemata 
+                        WHERE schema_name = %s
+                    """), (schema_name,))
+                    schema_exists = cur.fetchone() is not None
+                    
+                    debug_info['schema'] = {
+                        'name': schema_name,
+                        'exists': schema_exists
+                    }
+                    
+                    # Check table existence
+                    if schema_exists:
+                        table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                        cur.execute(sql.SQL("""
+                            SELECT table_name 
+                            FROM information_schema.tables 
+                            WHERE table_schema = %s AND table_name = %s
+                        """), (schema_name, table_name))
+                        table_exists = cur.fetchone() is not None
+                        
+                        debug_info['table'] = {
+                            'name': table_name,
+                            'exists': table_exists
+                        }
+                        
+                        # Test a simple query
+                        if table_exists:
+                            try:
+                                cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                                    sql.Identifier(schema_name),
+                                    sql.Identifier(table_name)
+                                ))
+                                count = cur.fetchone()[0]
+                                debug_info['test_query'] = {
+                                    'success': True,
+                                    'record_count': count
+                                }
+                            except Exception as query_error:
+                                debug_info['test_query'] = {
+                                    'success': False,
+                                    'error': str(query_error)
+                                }
+        except Exception as conn_error:
+            debug_info['connection_error'] = str(conn_error)
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Debug failed: {str(e)}'
         }), 500
 
 if __name__ == '__main__':
