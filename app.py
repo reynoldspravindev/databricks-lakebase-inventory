@@ -70,64 +70,87 @@ def get_schema_name():
     return os.getenv("POSTGRES_SCHEMA", "inventory_app")
 
 def init_database():
-    """Initialize database schema and table."""
+    """Initialize database table - requires pre-existing schema with proper permissions."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema_name = get_schema_name()
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 
-                # Create schema
-                cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
+                print(f"🔧 Initializing database with schema '{schema_name}' and table '{table_name}'")
                 
-                # Grant permissions on schema to current user
-                current_user = os.getenv('PGUSER')
-                if current_user:
-                    cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
-                        sql.Identifier(schema_name), 
-                        sql.Identifier(current_user)
-                    ))
-                    cur.execute(sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
-                        sql.Identifier(schema_name), 
-                        sql.Identifier(current_user)
-                    ))
+                # Get current session info for logging
+                cur.execute("SELECT current_user, session_user, current_database()")
+                user_info = cur.fetchone()
+                current_user = user_info[0]
+                session_user = user_info[1]
+                current_db = user_info[2]
                 
-                # Create table
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.{} (
-	id serial4 NOT NULL,
-	item_name varchar(100) NOT NULL,
-	description text NULL,
-	category varchar(50) NOT NULL,
-	quantity int4 NOT NULL,
-	unit_price float8 NOT NULL,
-	supplier varchar(100) NULL,
-	"location" varchar(100) NULL,
-	minimum_stock int4 NULL,
-	date_added timestamp DEFAULT CURRENT_TIMESTAMP,
-	last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT {}_pkey PRIMARY KEY (id)
-);
-                """).format(sql.Identifier(schema_name), sql.Identifier(table_name), sql.Identifier(table_name)))
+                print(f"🔍 Database: {current_db}")
+                print(f"🔍 Current user: {current_user}")
+                print(f"🔍 Session user: {session_user}")
                 
-                # Grant permissions on table to current user
-                if current_user:
-                    cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON TABLE {}.{} TO {}").format(
+                # Check if schema exists
+                cur.execute(sql.SQL("SELECT 1 FROM information_schema.schemata WHERE schema_name = %s"), (schema_name,))
+                if not cur.fetchone():
+                    print(f"❌ Schema '{schema_name}' does not exist!")
+                    print(f"💡 Database administrator needs to create the schema and grant permissions.")
+                    print(f"💡 Run this as a database superuser:")
+                    print(f"   CREATE SCHEMA IF NOT EXISTS {schema_name};")
+                    print(f"   GRANT USAGE ON SCHEMA {schema_name} TO \"{current_user}\";")
+                    print(f"   GRANT CREATE ON SCHEMA {schema_name} TO \"{current_user}\";")
+                    return False
+                
+                print(f"✅ Schema '{schema_name}' exists")
+                
+                # Try to create table
+                try:
+                    cur.execute(sql.SQL("""
+                        CREATE TABLE IF NOT EXISTS {}.{} (
+        	id serial4 NOT NULL,
+        	item_name varchar(100) NOT NULL,
+        	description text NULL,
+        	category varchar(50) NOT NULL,
+        	quantity int4 NOT NULL,
+        	unit_price float8 NOT NULL,
+        	supplier varchar(100) NULL,
+        	"location" varchar(100) NULL,
+        	minimum_stock int4 NULL,
+        	date_added timestamp DEFAULT CURRENT_TIMESTAMP,
+        	last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+        	CONSTRAINT {}_pkey PRIMARY KEY (id)
+        );
+                    """).format(sql.Identifier(schema_name), sql.Identifier(table_name), sql.Identifier(table_name)))
+                    print(f"✅ Table '{schema_name}.{table_name}' created/verified")
+                except Exception as table_error:
+                    print(f"❌ Could not create table: {table_error}")
+                    print(f"💡 Database administrator needs to grant permissions:")
+                    print(f"   GRANT CREATE ON SCHEMA {schema_name} TO \"{current_user}\";")
+                    return False
+                
+                # Test table access
+                try:
+                    cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
                         sql.Identifier(schema_name),
-                        sql.Identifier(table_name),
-                        sql.Identifier(current_user)
+                        sql.Identifier(table_name)
                     ))
-                    # Grant usage on sequence for serial primary key
-                    cur.execute(sql.SQL("GRANT USAGE, SELECT ON SEQUENCE {}.{}_id_seq TO {}").format(
-                        sql.Identifier(schema_name),
-                        sql.Identifier(table_name),
-                        sql.Identifier(current_user)
-                    ))
+                    count = cur.fetchone()[0]
+                    print(f"✅ Table access test passed - found {count} records")
+                except Exception as test_error:
+                    print(f"❌ Table access failed: {test_error}")
+                    print(f"💡 Database administrator needs to grant table permissions:")
+                    print(f"   GRANT ALL PRIVILEGES ON TABLE {schema_name}.{table_name} TO \"{current_user}\";")
+                    print(f"   GRANT USAGE, SELECT ON SEQUENCE {schema_name}.{table_name}_id_seq TO \"{current_user}\";")
+                    return False
                 
                 conn.commit()
+                print("✅ Database initialization completed successfully")
                 return True
+                
     except Exception as e:
-        print(f"Database initialization error: {e}")
+        print(f"❌ Database initialization error: {e}")
+        print(f"💡 This appears to be a permission issue with OAuth authentication.")
+        print(f"💡 Please contact your database administrator to set up the required permissions.")
         return False
 
 def fix_schema_permissions():
