@@ -1,42 +1,71 @@
-# Environment Configuration Template for Inventory Management App
+# Environment Configuration Template for Online Ordering & Click-and-Collect System
+# Copy this file to .env and fill in your actual values
 
-# =================================
-# DATABASE CONFIGURATION (Required)
-# =================================
-PGDATABASE=your_database_name
-PGUSER=your_username
-PGHOST=your_postgresql_host
-PGPORT=5432
-PGSSLMODE=require
-PGAPPNAME=inventory_app
-
-# =================================
-# DATABRICKS CONFIGURATION (Required)
-# =================================
-DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
-
-# =================================
-# DASHBOARD CONFIGURATION (Required for Analytics)
-# =================================
-# Get this ID from your Databricks dashboard URL
-# Example: https://workspace.cloud.databricks.com/dashboardsv3/01ef1234-5678-9abc-def0-123456789abc
-DASHBOARD_ID=01ef1234-5678-9abc-def0-123456789abc
-
-# =================================
-# APP CONFIGURATION (Optional)
-# =================================
-SECRET_KEY=your-secret-key-for-flask-sessions
+# ============================================================================
+# APPLICATION CONFIGURATION
+# ============================================================================
+SECRET_KEY=your-secret-key-here
 PORT=8080
 
-# =================================
-# QUICK START EXAMPLE
-# =================================
-# Copy these lines to your environment:
+# ============================================================================
+# DATABRICKS CONFIGURATION
+# ============================================================================
+# Your Databricks workspace host (required for OAuth mode)
+DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
+
+# ============================================================================
+# POSTGRES DATABASE CONFIGURATION
+# ============================================================================
+# Database connection details
+PGHOST=your-postgres-host.databricks.com
+PGPORT=443
+PGDATABASE=your_database_name
+PGSSLMODE=require
+PGAPPNAME=ordering_app
+
+# ============================================================================
+# AUTHENTICATION MODE - Choose ONE of the following options:
+# ============================================================================
+
+# OPTION 1: OAuth Authentication (for Databricks Apps deployment)
+# Use this when deploying as a Databricks App
+# The app will automatically use OAuth tokens for authentication
+PGUSER=your-oauth-user
+
+# OPTION 2: Explicit Postgres User (for local development)
+# Use this for local development or when you have dedicated postgres credentials
+# Uncomment and fill these values:
+# POSTGRES_USER=your_postgres_username
+# POSTGRES_PASSWORD=your_postgres_password
+
+# ============================================================================
+# DEPLOYMENT INSTRUCTIONS
+# ============================================================================
+
+# FOR LOCAL DEVELOPMENT:
+# 1. Create a dedicated Postgres user in Databricks
+# 2. Use OPTION 2 (POSTGRES_USER and POSTGRES_PASSWORD)
+# 3. Make sure PGHOST, PGPORT, PGDATABASE are set correctly
+# 4. Run: python app.py
+
+# FOR DATABRICKS APP DEPLOYMENT:
+# 1. Use OPTION 1 (PGUSER with OAuth)
+# 2. Deploy as a Databricks App
+# 3. The app will use OAuth tokens automatically
+
+# ============================================================================
+# SCHEMA NAMING
+# ============================================================================
+# The app automatically creates schemas in the format:
+# {PGAPPNAME}_schema_{PGUSER}
 # 
-# export PGDATABASE="inventory_db"
-# export PGUSER="your_user"
-# export PGHOST="your_host.cloud.databricks.com"
-# export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
-# export DASHBOARD_ID="your-dashboard-uuid"
-# 
-# Then run: python app.py
+# Example: ordering_app_schema_myuser
+# This ensures each deployment has its own isolated schema
+
+# ============================================================================
+# SAMPLE VALUES FOR REFERENCE
+# ============================================================================
+# PGHOST=your-workspace-123456.sql.gcp.databricks.com
+# PGDATABASE=shared_database
+# PGUSER=your_username
+# PGAPPNAME=ordering_app

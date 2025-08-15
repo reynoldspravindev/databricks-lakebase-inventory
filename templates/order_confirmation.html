@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Order Confirmation - Online Ordering & Click-and-Collect{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-check-circle fa-4x text-success"></i>
+                </div>
+                <h2 class="text-success mb-3">Order Confirmed!</h2>
+                <p class="lead mb-4">
+                    Thank you for your order. We're preparing it for pickup.
+                </p>
+                
+                {% set order = order_details.order %}
+                <div class="alert alert-success">
+                    <strong>Order Number: {{ order[1] }}</strong><br>
+                    <small>Please save this number for your records</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-receipt"></i> Order Details</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Customer Information</h6>
+                        <p class="mb-1"><strong>Name:</strong> {{ order[7] }}</p>
+                        <p class="mb-1"><strong>Email:</strong> {{ order[8] }}</p>
+                        {% if order[9] %}
+                        <p class="mb-1"><strong>Phone:</strong> {{ order[9] }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Order Information</h6>
+                        <p class="mb-1"><strong>Status:</strong> 
+                            <span class="badge bg-warning">{{ order[2].title() }}</span>
+                        </p>
+                        <p class="mb-1"><strong>Order Date:</strong> {{ order[6].strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        {% if order[4] %}
+                        <p class="mb-1"><strong>Pickup Time:</strong> {{ order[4].strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if order[5] %}
+                <div class="mt-3">
+                    <h6>Special Instructions</h6>
+                    <p class="text-muted">{{ order[5] }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-box"></i> Order Items</h5>
+            </div>
+            <div class="card-body">
+                {% for item in order_details.items %}
+                <div class="d-flex justify-content-between align-items-center py-2 {% if not loop.last %}border-bottom{% endif %}">
+                    <div>
+                        <h6 class="mb-1">{{ item[4] }}</h6>
+                        <small class="text-muted">{{ item[5] or 'No description' }}</small>
+                    </div>
+                    <div class="text-end">
+                        <div>{{ item[1] }} × ${{ "%.2f"|format(item[2]) }}</div>
+                        <strong>${{ "%.2f"|format(item[3]) }}</strong>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <div class="d-flex justify-content-between align-items-center pt-3 mt-3 border-top">
+                    <h5>Total:</h5>
+                    <h5 class="text-primary">${{ "%.2f"|format(order[3]) }}</h5>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6><i class="fas fa-map-marker-alt"></i> Pickup Information</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Location:</strong> Main Store Counter</p>
+                        <p class="mb-1"><strong>Address:</strong> 123 Main Street, Store Floor</p>
+                        <p class="mb-1"><strong>Hours:</strong> Mon-Fri 9AM-6PM</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>What to Bring:</strong></p>
+                        <ul class="mb-0">
+                            <li>Your order number: <strong>{{ order[1] }}</strong></li>
+                            <li>Valid photo ID</li>
+                            <li>This confirmation (digital or printed)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="{{ url_for('index') }}" class="btn btn-primary me-2">
+                <i class="fas fa-store"></i> Continue Shopping
+            </a>
+            <a href="{{ url_for('my_orders_route', email=order[8]) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-receipt"></i> View All Orders
+            </a>
+        </div>
+
+        <div class="alert alert-info mt-4">
+            <h6 class="alert-heading"><i class="fas fa-bell"></i> What's Next?</h6>
+            <ul class="mb-0">
+                <li>You'll receive an email confirmation shortly</li>
+                <li>We'll send you a notification when your order is ready for pickup</li>
+                <li>Typical preparation time is 30 minutes</li>
+                <li>Need to make changes? Contact us at store@example.com or (555) 123-4567</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Print function
+function printOrder() {
+    window.print();
+}
+
+// Add print button functionality if needed
+document.addEventListener('DOMContentLoaded', function() {
+    // You can add a print button here if desired
+    console.log('Order confirmation loaded for order: {{ order[1] }}');
+});
+</script>
+{% endblock %}

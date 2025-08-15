@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Cart & Checkout - Online Ordering & Click-and-Collect{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <h2><i class="fas fa-shopping-cart"></i> Your Cart</h2>
+        
+        {% if cart_items and cart_items|length > 0 %}
+            <div class="card">
+                <div class="card-body">
+                    {% for item in cart_items %}
+                    <div class="d-flex justify-content-between align-items-center py-3 {% if not loop.last %}border-bottom{% endif %}">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-box fa-2x text-muted"></i>
+                            </div>
+                            <div>
+                                <h5 class="mb-1">{{ item.name }}</h5>
+                                <p class="text-muted mb-1">{{ item.description or 'No description' }}</p>
+                                <small class="text-muted">
+                                    Price: ${{ "%.2f"|format(item.price) }} each
+                                    {% if item.available_stock < item.quantity %}
+                                        <br><span class="text-warning">
+                                            <i class="fas fa-exclamation-triangle"></i> 
+                                            Only {{ item.available_stock }} available!
+                                        </span>
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <div class="mb-2">
+                                <strong>Qty: {{ item.quantity }}</strong>
+                            </div>
+                            <div class="mb-2">
+                                <strong class="text-primary">${{ "%.2f"|format(item.subtotal) }}</strong>
+                            </div>
+                            <a href="{{ url_for('remove_from_cart_route', product_id=item.product_id) }}" 
+                               class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-trash"></i> Remove
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="d-flex justify-content-between align-items-center pt-3 mt-3 border-top">
+                        <h4>Total:</h4>
+                        <h4 class="text-primary">${{ "%.2f"|format(cart_total) }}</h4>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                    <h3 class="text-muted">Your cart is empty</h3>
+                    <p class="mb-3">Add some products to your cart to get started!</p>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">
+                        <i class="fas fa-store"></i> Continue Shopping
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if cart_items and cart_items|length > 0 %}
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-credit-card"></i> Checkout</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('checkout_route') }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Full Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address *</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Phone Number</label>
+                        <input type="tel" class="form-control" id="phone" name="phone">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="pickup_time" class="form-label">Preferred Pickup Time</label>
+                        <select class="form-select" id="pickup_time" name="pickup_time">
+                            <option value="">Select a time slot (optional)</option>
+                            {% for slot in pickup_slots %}
+                            <option value="{{ slot[1].isoformat() }}">
+                                {{ slot[1].strftime('%A, %B %d at %I:%M %p') }}
+                                ({{ slot[2] - slot[3] }} slots available)
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            If no time is selected, we'll prepare your order as soon as possible.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Special Instructions</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                  placeholder="Any special requests or notes for your order..."></textarea>
+                    </div>
+                    
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <h6 class="mb-2">Order Summary</h6>
+                        <div class="d-flex justify-content-between">
+                            <span>Items ({{ cart_items|length }}):</span>
+                            <span>${{ "%.2f"|format(cart_total) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Pickup:</span>
+                            <span class="text-success">FREE</span>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <strong>Total:</strong>
+                            <strong class="text-primary">${{ "%.2f"|format(cart_total) }}</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="terms" required>
+                            <label class="form-check-label" for="terms">
+                                I agree to the terms and conditions
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success w-100 btn-lg">
+                        <i class="fas fa-check"></i> Place Order
+                    </button>
+                    
+                    <div class="mt-3 text-center">
+                        <small class="text-muted">
+                            <i class="fas fa-lock"></i> Secure checkout
+                        </small>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if cart_items and cart_items|length > 0 %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h6><i class="fas fa-info-circle"></i> Pickup Information</h6>
+                <ul class="mb-0">
+                    <li>Orders are typically ready for pickup within 30 minutes</li>
+                    <li>You'll receive an email confirmation with pickup instructions</li>
+                    <li>Bring a valid ID when picking up your order</li>
+                    <li>Pickup location: Main Store Counter</li>
+                    <li>Questions? Contact us at store@example.com or (555) 123-4567</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Check for any stock issues and warn user
+    const warnings = document.querySelectorAll('.text-warning');
+    if (warnings.length > 0) {
+        alert('Some items in your cart may have limited availability. Please review before checkout.');
+    }
+});
+</script>
+{% endblock %}
