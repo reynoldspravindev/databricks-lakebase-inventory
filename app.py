@@ -305,7 +305,7 @@ def get_order(order_id):
                 
                 return {
                     'order': order,
-                    'items': items
+                    'order_items': items
                 }
     except Exception as e:
         print(f"Get order error: {e}")
