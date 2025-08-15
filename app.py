@@ -454,6 +454,43 @@ def get_customer_orders(customer_id, status=None):
         print(f"Get customer orders error: {e}")
         return []
 
+def update_product_images():
+    """Update product images with default Unsplash URLs for missing images."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                
+                # Default image URLs for products that might be missing them
+                default_images = {
+                    "Leather Journal": "https://images.unsplash.com/photo-1544716278-e2247dc0e21c?w=400",
+                    "Portable Power Bank": "https://images.unsplash.com/photo-1609592094731-8c1f5a9e0eb3?w=400",
+                    "USB-C Cable 6ft": "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400",
+                    "Honey Gift Set": "https://images.unsplash.com/photo-1587049016823-c90bb28637b6?w=400",
+                    "Ceramic Coffee Mug Set": "https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?w=400",
+                    "Scented Candle Collection": "https://images.unsplash.com/photo-1602874801006-47c1c6c54a9b?w=400"
+                }
+                
+                updated_count = 0
+                for product_name, image_url in default_images.items():
+                    cur.execute(sql.SQL("""
+                        UPDATE {}.products 
+                        SET image_url = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE name = %s AND (image_url IS NULL OR image_url = '')
+                    """).format(sql.Identifier(schema)), (image_url, product_name))
+                    
+                    if cur.rowcount > 0:
+                        updated_count += 1
+                        print(f"Updated image for: {product_name}")
+                
+                conn.commit()
+                print(f"Updated {updated_count} product images")
+                return updated_count
+                
+    except Exception as e:
+        print(f"Update product images error: {e}")
+        return 0
+
 # Cart Management Functions
 def add_to_cart(product_id, quantity):
     """Add item to session cart."""
@@ -697,6 +734,20 @@ def api_cart():
         'total': cart_total,
         'item_count': len(cart_items)
     })
+
+@app.route('/update-product-images')
+def update_product_images_route():
+    """Update product images with default URLs for missing images."""
+    try:
+        updated_count = update_product_images()
+        if updated_count > 0:
+            flash(f'Successfully updated {updated_count} product images!', 'success')
+        else:
+            flash('All product images are already up to date.', 'info')
+    except Exception as e:
+        flash(f'Error updating product images: {str(e)}', 'error')
+    
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 8080))) 
