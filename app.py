@@ -85,7 +85,9 @@ def execute_sql_script(script_path, schema_name):
                 # Split by semicolon and execute each statement
                 statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
                 for statement in statements:
-                    if statement:
+                    # Skip comments and empty statements
+                    if statement and not statement.startswith('--'):
+                        print(f"Executing: {statement[:50]}...")
                         cur.execute(statement)
                 conn.commit()
         return True
@@ -100,16 +102,30 @@ def is_fresh_deployment():
 def init_database():
     """Initialize database schema and tables for ordering system."""
     schema_name = get_schema_name()
+    is_fresh = is_fresh_deployment()
+    
+    print(f"🔍 Database initialization - Schema: '{schema_name}', Fresh deployment: {is_fresh}")
     
     # Check if this is a fresh deployment
-    if is_fresh_deployment():
+    if is_fresh:
         print(f"🔄 Fresh deployment detected. Creating schema '{schema_name}' and tables...")
         
+        # Check if SQL files exist
+        if not os.path.exists('sql/create_schema.sql'):
+            print("❌ SQL script 'sql/create_schema.sql' not found!")
+            return False
+        
+        if not os.path.exists('sql/insert_sample_data.sql'):
+            print("❌ SQL script 'sql/insert_sample_data.sql' not found!")
+            return False
+        
         # Execute schema creation script
+        print("📝 Executing schema creation script...")
         if execute_sql_script('sql/create_schema.sql', schema_name):
             print(f"✅ Schema '{schema_name}' and tables created successfully!")
             
             # Insert sample data for fresh deployment
+            print("📝 Executing sample data insertion script...")
             if execute_sql_script('sql/insert_sample_data.sql', schema_name):
                 print("✅ Sample data inserted successfully!")
             else:
