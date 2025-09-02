@@ -68,92 +68,71 @@ def get_connection():
     return get_connection_pool().connection()
 
 def get_schema_name():
-    """Get the schema name in the format {PGAPPNAME}_schema_{PGUSER}."""
-    pgappname = os.getenv("PGAPPNAME", "ordering_app")
-    pguser = os.getenv("PGUSER", "").replace('-', '')
-    return f"{pgappname}_schema_{pguser}"
+    """Get the schema name from POSTGRES_SCHEMA environment variable."""
+    return os.getenv("POSTGRES_SCHEMA", "inventory_app")
+
+def execute_sql_script(script_path, schema_name):
+    """Execute a SQL script file with schema name substitution."""
+    try:
+        with open(script_path, 'r') as file:
+            sql_content = file.read()
+        
+        # Replace {schema_name} placeholder with actual schema name
+        sql_content = sql_content.replace('{schema_name}', schema_name)
+        
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Split by semicolon and execute each statement
+                statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
+                for statement in statements:
+                    if statement:
+                        cur.execute(statement)
+                conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error executing SQL script {script_path}: {e}")
+        return False
+
+def is_fresh_deployment():
+    """Check if this is a fresh deployment based on IS_FRESH_DEPLOYMENT environment variable."""
+    return os.getenv("IS_FRESH_DEPLOYMENT", "false").lower() == "true"
 
 def init_database():
     """Initialize database schema and tables for ordering system."""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                schema_name = get_schema_name()
-                
-                cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
-                
-                # Products table
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.products (
-                        id SERIAL PRIMARY KEY,
-                        name VARCHAR(100) NOT NULL,
-                        description TEXT,
-                        category VARCHAR(50) NOT NULL,
-                        price DECIMAL(10,2) NOT NULL,
-                        stock_quantity INTEGER NOT NULL DEFAULT 0,
-                        reserved_quantity INTEGER NOT NULL DEFAULT 0,
-                        image_url VARCHAR(255),
-                        is_active BOOLEAN DEFAULT TRUE,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """).format(sql.Identifier(schema_name)))
-                
-                # Customers table
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.customers (
-                        id SERIAL PRIMARY KEY,
-                        name VARCHAR(100) NOT NULL,
-                        email VARCHAR(100) UNIQUE NOT NULL,
-                        phone VARCHAR(20),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """).format(sql.Identifier(schema_name)))
-                
-                # Orders table
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.orders (
-                        id SERIAL PRIMARY KEY,
-                        customer_id INTEGER REFERENCES {}.customers(id),
-                        order_number VARCHAR(50) UNIQUE NOT NULL,
-                        status VARCHAR(20) DEFAULT 'pending',
-                        total_amount DECIMAL(10,2) NOT NULL,
-                        pickup_time TIMESTAMP,
-                        pickup_slot_id INTEGER,
-                        notes TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """).format(sql.Identifier(schema_name), sql.Identifier(schema_name)))
-                
-                # Order items table
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.order_items (
-                        id SERIAL PRIMARY KEY,
-                        order_id INTEGER REFERENCES {}.orders(id) ON DELETE CASCADE,
-                        product_id INTEGER REFERENCES {}.products(id),
-                        quantity INTEGER NOT NULL,
-                        unit_price DECIMAL(10,2) NOT NULL,
-                        subtotal DECIMAL(10,2) NOT NULL
-                    )
-                """).format(sql.Identifier(schema_name), sql.Identifier(schema_name), sql.Identifier(schema_name)))
-                
-                # Pickup slots table
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {}.pickup_slots (
-                        id SERIAL PRIMARY KEY,
-                        slot_time TIMESTAMP NOT NULL,
-                        max_orders INTEGER DEFAULT 10,
-                        current_orders INTEGER DEFAULT 0,
-                        is_available BOOLEAN DEFAULT TRUE
-                    )
-                """).format(sql.Identifier(schema_name)))
-                
-                conn.commit()
-                return True
-    except Exception as e:
-        print(f"Database initialization error: {e}")
-        return False
+    schema_name = get_schema_name()
+    
+    # Check if this is a fresh deployment
+    if is_fresh_deployment():
+        print(f"🔄 Fresh deployment detected. Creating schema '{schema_name}' and tables...")
+        
+        # Execute schema creation script
+        if execute_sql_script('sql/create_schema.sql', schema_name):
+            print(f"✅ Schema '{schema_name}' and tables created successfully!")
+            
+            # Insert sample data for fresh deployment
+            if execute_sql_script('sql/insert_sample_data.sql', schema_name):
+                print("✅ Sample data inserted successfully!")
+            else:
+                print("⚠️ Warning: Failed to insert sample data")
+            
+            return True
+        else:
+            print(f"❌ Failed to create schema '{schema_name}' and tables")
+            return False
+    else:
+        print(f"🔄 Existing deployment. Using schema '{schema_name}'...")
+        
+        # For existing deployments, just ensure the schema exists
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
+                    conn.commit()
+            print(f"✅ Schema '{schema_name}' verified/created")
+            return True
+        except Exception as e:
+            print(f"❌ Database initialization error: {e}")
+            return False
 
 # Product Management Functions
 def get_products():
