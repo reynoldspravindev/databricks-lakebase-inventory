@@ -31,10 +31,10 @@ CREATE TABLE {schema_name}.customers (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Orders table
+-- Orders table (without foreign key initially)
 CREATE TABLE {schema_name}.orders (
     id SERIAL PRIMARY KEY,
-    customer_id INTEGER REFERENCES {schema_name}.customers(id),
+    customer_id INTEGER,
     order_number VARCHAR(50) UNIQUE NOT NULL,
     status VARCHAR(20) DEFAULT 'pending',
     total_amount DECIMAL(10,2) NOT NULL,
@@ -45,15 +45,25 @@ CREATE TABLE {schema_name}.orders (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Order items table
+-- Order items table (without foreign keys initially)
 CREATE TABLE {schema_name}.order_items (
     id SERIAL PRIMARY KEY,
-    order_id INTEGER REFERENCES {schema_name}.orders(id) ON DELETE CASCADE,
-    product_id INTEGER REFERENCES {schema_name}.products(id),
+    order_id INTEGER,
+    product_id INTEGER,
     quantity INTEGER NOT NULL,
     unit_price DECIMAL(10,2) NOT NULL,
     subtotal DECIMAL(10,2) NOT NULL
 );
+
+-- Add foreign key constraints after all tables are created
+ALTER TABLE {schema_name}.orders ADD CONSTRAINT fk_orders_customer 
+    FOREIGN KEY (customer_id) REFERENCES {schema_name}.customers(id);
+
+ALTER TABLE {schema_name}.order_items ADD CONSTRAINT fk_order_items_order 
+    FOREIGN KEY (order_id) REFERENCES {schema_name}.orders(id) ON DELETE CASCADE;
+
+ALTER TABLE {schema_name}.order_items ADD CONSTRAINT fk_order_items_product 
+    FOREIGN KEY (product_id) REFERENCES {schema_name}.products(id);
 
 -- Pickup slots table
 CREATE TABLE {schema_name}.pickup_slots (

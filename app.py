@@ -84,15 +84,25 @@ def execute_sql_script(script_path, schema_name):
             with conn.cursor() as cur:
                 # Split by semicolon and execute each statement
                 statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
-                for statement in statements:
+                print(f"Found {len(statements)} SQL statements to execute")
+                
+                for i, statement in enumerate(statements):
                     # Skip comments and empty statements
                     if statement and not statement.startswith('--'):
-                        print(f"Executing: {statement[:50]}...")
-                        cur.execute(statement)
+                        print(f"Executing statement {i+1}/{len(statements)}: {statement[:60]}...")
+                        try:
+                            cur.execute(statement)
+                            print(f"✅ Statement {i+1} executed successfully")
+                        except Exception as stmt_error:
+                            print(f"❌ Error in statement {i+1}: {stmt_error}")
+                            print(f"Statement content: {statement}")
+                            raise stmt_error
+                
                 conn.commit()
+                print(f"✅ All {len(statements)} statements executed and committed successfully")
         return True
     except Exception as e:
-        print(f"Error executing SQL script {script_path}: {e}")
+        print(f"❌ Error executing SQL script {script_path}: {e}")
         return False
 
 def is_fresh_deployment():
