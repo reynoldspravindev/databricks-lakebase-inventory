@@ -82,21 +82,33 @@ def execute_sql_script(script_path, schema_name):
         
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Split by semicolon and execute each statement
-                statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
+                # Split by semicolon and clean up statements
+                statements = []
+                for stmt in sql_content.split(';'):
+                    stmt = stmt.strip()
+                    if stmt and not stmt.startswith('--'):
+                        # Remove any trailing comments from the statement
+                        lines = stmt.split('\n')
+                        clean_lines = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('--'):
+                                clean_lines.append(line)
+                        if clean_lines:
+                            clean_stmt = ' '.join(clean_lines)
+                            statements.append(clean_stmt)
+                
                 print(f"Found {len(statements)} SQL statements to execute")
                 
                 for i, statement in enumerate(statements):
-                    # Skip comments and empty statements
-                    if statement and not statement.startswith('--'):
-                        print(f"Executing statement {i+1}/{len(statements)}: {statement[:60]}...")
-                        try:
-                            cur.execute(statement)
-                            print(f"✅ Statement {i+1} executed successfully")
-                        except Exception as stmt_error:
-                            print(f"❌ Error in statement {i+1}: {stmt_error}")
-                            print(f"Statement content: {statement}")
-                            raise stmt_error
+                    print(f"Executing statement {i+1}/{len(statements)}: {statement[:60]}...")
+                    try:
+                        cur.execute(statement)
+                        print(f"✅ Statement {i+1} executed successfully")
+                    except Exception as stmt_error:
+                        print(f"❌ Error in statement {i+1}: {stmt_error}")
+                        print(f"Statement content: {statement}")
+                        raise stmt_error
                 
                 conn.commit()
                 print(f"✅ All {len(statements)} statements executed and committed successfully")
