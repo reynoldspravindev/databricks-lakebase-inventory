@@ -111,18 +111,18 @@ def init_database():
         print(f"🔄 Fresh deployment detected. Creating schema '{schema_name}' and tables...")
         
         # Check if SQL files exist
-        if not os.path.exists('sql/create_schema.sql'):
-            print("❌ SQL script 'sql/create_schema.sql' not found!")
+        if not os.path.exists('sql/create_fresh_schema.sql'):
+            print("❌ SQL script 'sql/create_fresh_schema.sql' not found!")
             return False
         
         if not os.path.exists('sql/insert_sample_data.sql'):
             print("❌ SQL script 'sql/insert_sample_data.sql' not found!")
             return False
         
-        # Execute schema creation script
-        print("📝 Executing schema creation script...")
-        if execute_sql_script('sql/create_schema.sql', schema_name):
-            print(f"✅ Schema '{schema_name}' and tables created successfully!")
+        # Execute fresh schema creation script (drops and recreates everything)
+        print("📝 Executing fresh schema creation script...")
+        if execute_sql_script('sql/create_fresh_schema.sql', schema_name):
+            print(f"✅ Fresh schema '{schema_name}' and tables created successfully!")
             
             # Insert sample data for fresh deployment
             print("📝 Executing sample data insertion script...")
@@ -133,7 +133,7 @@ def init_database():
             
             return True
         else:
-            print(f"❌ Failed to create schema '{schema_name}' and tables")
+            print(f"❌ Failed to create fresh schema '{schema_name}' and tables")
             return False
     else:
         print(f"🔄 Existing deployment. Using schema '{schema_name}'...")
