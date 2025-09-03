@@ -86,7 +86,7 @@ def execute_sql_script(script_path, schema_name):
                 statements = []
                 for stmt in sql_content.split(';'):
                     stmt = stmt.strip()
-                    if stmt and not stmt.startswith('--'):
+                    if stmt:
                         # Remove any trailing comments from the statement
                         lines = stmt.split('\n')
                         clean_lines = []
@@ -96,7 +96,9 @@ def execute_sql_script(script_path, schema_name):
                                 clean_lines.append(line)
                         if clean_lines:
                             clean_stmt = ' '.join(clean_lines)
-                            statements.append(clean_stmt)
+                            # Only add if it's a valid SQL statement (not just comments)
+                            if any(keyword in clean_stmt.upper() for keyword in ['CREATE', 'DROP', 'ALTER', 'INSERT', 'UPDATE', 'DELETE']):
+                                statements.append(clean_stmt)
                 
                 print(f"Found {len(statements)} SQL statements to execute")
                 
