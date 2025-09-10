@@ -63,6 +63,9 @@
                                 <span class="visually-hidden">Loading dashboard...</span>
                             </div>
                             <p class="mt-2 text-muted">Loading analytics dashboard...</p>
+                            <button class="btn btn-sm btn-outline-secondary mt-2" onclick="hideLoader()">
+                                <i class="fas fa-eye"></i> Show Dashboard
+                            </button>
                         </div>
                     </div>
 
@@ -274,15 +277,48 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle authentication token refresh
     checkTokenExpiry();
     
-    // Set iframe load timeout
+    // Auto-hide loader after a shorter timeout since dashboard is loading
     setTimeout(function() {
         const iframe = document.getElementById('databricksDashboard');
         const loader = document.getElementById('dashboardLoader');
-        if (iframe && loader && iframe.style.display === 'none' && loader.style.display !== 'none') {
-            console.warn('Dashboard loading timeout');
-            onDashboardError();
+        if (iframe && loader && loader.style.display !== 'none') {
+            console.log('Auto-hiding loader after 3 second timeout');
+            onDashboardLoad();
         }
-    }, 30000); // 30 second timeout
+    }, 3000); // 3 second timeout - shorter since we can see content is loading
+    
+    // Additional check for iframe content
+    const iframe = document.getElementById('databricksDashboard');
+    if (iframe) {
+        // Try to detect when iframe content is ready
+        iframe.addEventListener('load', function() {
+            console.log('Iframe load event fired');
+            setTimeout(onDashboardLoad, 1000); // Small delay to ensure content is rendered
+        });
+        
+        // Fallback: check if iframe is visible and has content
+        const checkContent = setInterval(function() {
+            if (iframe.offsetHeight > 0 && iframe.offsetWidth > 0) {
+                console.log('Iframe has dimensions, assuming loaded');
+                clearInterval(checkContent);
+                onDashboardLoad();
+            }
+        }, 500); // Check every 500ms for faster detection
+        
+        // Clear interval after 8 seconds
+        setTimeout(function() {
+            clearInterval(checkContent);
+        }, 8000);
+        
+        // Additional immediate check after 1 second
+        setTimeout(function() {
+            if (iframe.offsetHeight > 0 && iframe.offsetWidth > 0) {
+                console.log('Iframe content detected after 1 second');
+                clearInterval(checkContent);
+                onDashboardLoad();
+            }
+        }, 1000);
+    }
 });
 
 function onDashboardLoad() {
@@ -296,6 +332,12 @@ function onDashboardLoad() {
     if (error) error.style.display = 'none';
     
     console.log('Dashboard loaded successfully');
+}
+
+function hideLoader() {
+    // Manual function to hide the loader
+    console.log('Manually hiding loader');
+    onDashboardLoad();
 }
 
 function onDashboardError() {
