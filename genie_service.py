@@ -30,19 +30,21 @@ class GenieService:
     def get_query_result(self, statement_id: str) -> Optional[pd.DataFrame]:
         """
         Retrieve query results from Databricks statement execution.
+        Based on Databricks Apps Cookbook implementation.
         For simplicity, assumes data fits in one chunk.
         """
         try:
             result = self.workspace_client.statement_execution.get_statement(statement_id)
             
+            # Following the exact pattern from Databricks Apps Cookbook
             if not result.result or not result.result.data_array:
                 return None
                 
-            # Convert to DataFrame
-            columns = [col.name for col in result.manifest.schema.columns]
-            data = result.result.data_array
-            
-            return pd.DataFrame(data, columns=columns)
+            # Convert to DataFrame exactly as shown in the cookbook
+            return pd.DataFrame(
+                result.result.data_array, 
+                columns=[i.name for i in result.manifest.schema.columns]
+            )
             
         except Exception as e:
             print(f"Error retrieving query result: {e}")
@@ -51,6 +53,7 @@ class GenieService:
     def process_genie_response(self, response) -> Dict[str, Any]:
         """
         Process Genie response and extract text, queries, and data.
+        Based on Databricks Apps Cookbook implementation.
         Returns structured response data.
         """
         processed_response = {
@@ -61,48 +64,56 @@ class GenieService:
         }
         
         try:
-            for attachment in response.attachments:
-                if hasattr(attachment, 'text') and attachment.text:
+            # Process attachments exactly as shown in Databricks Apps Cookbook
+            for i in response.attachments:
+                if i.text:
+                    # Handle text response
                     processed_response['text_content'].append({
-                        'content': attachment.text.content,
+                        'content': i.text.content,
                         'type': 'text'
                     })
-                elif hasattr(attachment, 'query') and attachment.query:
-                    # Debug: Print available attributes
-                    print(f"Query attachment attributes: {dir(attachment.query)}")
-                    
-                    # Get query description and generated SQL
-                    query_info = {
-                        'description': getattr(attachment.query, 'description', 'No description available'),
-                        'generated_sql': getattr(attachment.query, 'query', 'No query available'),
-                        'type': 'query'
-                    }
-                    
-                    # Try to get statement_id from different possible attributes
-                    statement_id = None
-                    for attr in ['statement_id', 'id', 'statementId', 'query_id']:
-                        if hasattr(attachment.query, attr):
-                            statement_id = getattr(attachment.query, attr)
-                            break
-                    
-                    if statement_id:
-                        query_info['statement_id'] = statement_id
+                elif i.query:
+                    # Handle query response - following the exact pattern from the cookbook
+                    try:
+                        # Get query details
+                        query_info = {
+                            'description': i.query.description,
+                            'generated_sql': i.query.query,
+                            'statement_id': i.query.statement_id,
+                            'type': 'query'
+                        }
                         processed_response['queries'].append(query_info)
                         
-                        # Execute query and get data
-                        df = self.get_query_result(statement_id)
-                        if df is not None:
+                        # Execute query and get data (following cookbook pattern)
+                        data = self.get_query_result(i.query.statement_id)
+                        if data is not None:
                             processed_response['data_frames'].append({
-                                'data': df.to_dict('records'),
-                                'columns': df.columns.tolist(),
-                                'shape': df.shape,
-                                'statement_id': statement_id
+                                'data': data.to_dict('records'),
+                                'columns': data.columns.tolist(),
+                                'shape': data.shape,
+                                'statement_id': i.query.statement_id
                             })
-                            processed_response['generated_code'].append(attachment.query.query)
-                    else:
-                        # Add query info without statement_id
+                            processed_response['generated_code'].append(i.query.query)
+                            
+                    except AttributeError as e:
+                        # Handle case where statement_id might not exist
+                        print(f"Warning: Query attachment missing expected attributes: {e}")
+                        # Still add the query info without execution
+                        query_info = {
+                            'description': getattr(i.query, 'description', 'No description available'),
+                            'generated_sql': getattr(i.query, 'query', 'No query available'),
+                            'type': 'query'
+                        }
                         processed_response['queries'].append(query_info)
-                        print(f"Warning: Could not find statement_id in query attachment")
+                    except Exception as e:
+                        print(f"Warning: Error processing query: {e}")
+                        # Add query info even if execution fails
+                        query_info = {
+                            'description': getattr(i.query, 'description', 'No description available'),
+                            'generated_sql': getattr(i.query, 'query', 'No query available'),
+                            'type': 'query'
+                        }
+                        processed_response['queries'].append(query_info)
             
             return processed_response
             
