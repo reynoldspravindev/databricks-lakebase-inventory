@@ -77,27 +77,42 @@ def init_database():
                 schema_name = get_schema_name()
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 
+                print(f"🔧 Creating schema '{schema_name}' if it doesn't exist...")
                 cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
-                cur.execute(sql.SQL("""
-                    CREATE TABLE IF NOT EXISTS {1}.{2} (
-	id serial4 NOT NULL,
-	item_name varchar(100) NOT NULL,
-	description text NULL,
-	category varchar(50) NOT NULL,
-	quantity int4 NOT NULL,
-	unit_price float8 NOT NULL,
-	supplier varchar(100) NULL,
-	"location" varchar(100) NULL,
-	minimum_stock int4 NULL,
-	date_added timestamp DEFAULT CURRENT_TIMESTAMP,
-	last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT {2}_pkey PRIMARY KEY (id)
-);
-                """).format(sql.Identifier(schema_name), sql.Identifier(table_name)))
+                print(f"✅ Schema '{schema_name}' ready")
+                
+                print(f"🔧 Creating table '{schema_name}.{table_name}' if it doesn't exist...")
+                
+                # Fixed CREATE TABLE statement
+                create_table_sql = sql.SQL("""
+                    CREATE TABLE IF NOT EXISTS {}.{} (
+                        id serial4 NOT NULL,
+                        item_name varchar(100) NOT NULL,
+                        description text NULL,
+                        category varchar(50) NOT NULL,
+                        quantity int4 NOT NULL,
+                        unit_price float8 NOT NULL,
+                        supplier varchar(100) NULL,
+                        "location" varchar(100) NULL,
+                        minimum_stock int4 NULL,
+                        date_added timestamp DEFAULT CURRENT_TIMESTAMP,
+                        last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (id)
+                    );
+                """).format(
+                    sql.Identifier(schema_name), 
+                    sql.Identifier(table_name)
+                )
+                
+                cur.execute(create_table_sql)
+                print(f"✅ Table '{schema_name}.{table_name}' ready")
+                
                 conn.commit()
+                print("✅ Schema and table creation committed")
                 return True
+                
     except Exception as e:
-        print(f"Database initialization error: {e}")
+        print(f"❌ Database initialization error: {e}")
         return False
 
 def add_inventory_item(item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
