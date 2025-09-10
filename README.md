@@ -33,7 +33,6 @@ This project exemplifies the next generation of data-driven applications, harnes
 
 For a deep dive into the Databricks dashboard integration, Lakebase setup, and security architecture, see `DASHBOARD_INTEGRATION_SUMMARY.md` and `DASHBOARD_SETUP.md`.
 
-
 ## Quick Start
 
 ### Prerequisites
@@ -63,6 +62,126 @@ python app_local.py
 python app.py
 ```
 
+## 🚀 Databricks App Deployment
+
+### Step 1: Set Up Lakebase Database Resource
+
+When creating your Databricks App, you need to add your Lakebase database as an App resource:
+
+1. **Create/Edit your Databricks App**
+2. **Add Database Resource:**
+   - Go to **App Resources** section
+   - Click **Add Resource**
+   - Select **Database** type
+   - **Resource Name**: Use your database name (e.g., `databricks_postgres`)
+   - **Resource Key**: Set this to the same as your database name (e.g., `databricks_postgres`)
+   - **Permission**: Select **"Can Connect"**
+   - **Database**: Select your Lakebase instance from the dropdown
+
+### Step 2: Set Up Flask Secret Key
+
+1. **Generate a secure Flask secret key:**
+   ```python
+   import secrets
+   print(secrets.token_hex(32))
+   # Example output: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6'
+   ```
+
+2. **Create Databricks Secret Scope:**
+   ```bash
+   # Using Databricks CLI
+   databricks secrets create-scope app-secrets
+   
+   # Add the Flask secret key
+   databricks secrets put-secret app-secrets SECRET_KEY
+   # When prompted, paste your generated secret key
+   ```
+
+3. **Add Secret Scope as App Resource:**
+   - Go to **App Resources** section
+   - Click **Add Resource**
+   - Select **Secret Scope** type
+   - **Resource Name**: `app-secrets`
+   - **Resource Key**: `app-secrets`
+   - **Permission**: Select **"Can Read"**
+   - **Secret Scope**: Select `app-secrets` from the dropdown
+
+### Step 3: Configure Your app.yaml
+
+Create an `app.yaml` file with the following configuration:
+
+```yaml
+name: inventory-management-app
+description: Databricks Lakebase Inventory Management System
+
+# Database configuration
+env:
+  - name: PGDATABASE
+    value: "your_database_name"
+  - name: PGUSER (only for local testing)
+    value: "your_username@domain.com"
+  - name: PGHOST (only for local testing)
+    value: "your-lakebase-host.database.azuredatabricks.net"
+  - name: PGPASSWORD (only for local testing)
+    value: "your PGUSER password or OAUTH token"
+  - name: PGPORT
+    value: "5432"
+  - name: PGSSLMODE
+    value: "require"
+  - name: PGAPPNAME
+    value: "inventory_app"
+  
+  # Schema and table configuration
+  - name: POSTGRES_SCHEMA
+    value: "inventory_app"
+  - name: POSTGRES_TABLE
+    value: "inventory_items"
+  
+  # App configuration
+  - name: PORT
+    value: "8080"
+  
+  # Databricks configuration (optional - for dashboard integration)
+  - name: DATABRICKS_HOST
+    value: "https://your-workspace.cloud.databricks.com"
+  - name: DASHBOARD_ID
+    value: "your-dashboard-uuid"  # Optional
+
+# Resources
+resources:
+  # Lakebase database resource
+  - name: databricks_postgres
+    key: databricks_postgres
+    permission: CAN_CONNECT
+  
+  # Secret scope for Flask key
+  - name: app-secrets
+    key: app-secrets
+    permission: CAN_READ
+```
+
+### Step 4: Deploy Your App
+
+```bash
+# Using Databricks CLI
+# Optional Continuous Sync
+databricks sync --watch . <your app deployment workspace path for source code>
+
+# Deploy the app
+databricks apps deploy <app name> --source-code-path <your app deployment workspace path for source code>
+
+# Or using the Databricks UI
+# Upload your code and app.yaml through the Apps interface
+```
+
+### Step 5: Verify App Resources
+
+After deployment, verify that your app has access to:
+
+1. **Database Connection**: The app should be able to connect to your Lakebase instance
+2. **Secret Access**: The app should be able to read the Flask secret key from the secret scope
+3. **Table Creation**: The app will automatically create the `inventory_app.inventory_items` table on first run
+
 ## 📊 CSV Upload Features
 
 - **Bulk Upload**: Add multiple items at once via CSV
@@ -86,7 +205,6 @@ python app.py
 - `location` (max 100 characters)
 - `minimum_stock` (integer ≥ 0)
 
-
 ## 📄 Sample Data
 
 Use the included `sample_inventory.csv` for testing:
@@ -109,21 +227,30 @@ To change which app version you're using:
 - **Data validation is strict** - invalid rows are skipped with detailed error messages
 - **File encoding should be UTF-8** for best compatibility
 - **Templates are automatically generated** with the latest format requirements
-- **Deployment steps for Databricks Apps** follow directions as per the official [documentation for Apps CLI](https://docs.databricks.com/en/dev-tools/cli/commands/apps.html) or follow the instructions on the UI for Databricks Apps.
+- **App Resources are required** for Databricks App deployment - ensure both database and secret scope resources are properly configured
 
-## 🛠️ Configuration
+## 🛠️ Troubleshooting
 
-### YAML Configuration Example:
-Refer: https://docs.databricks.com/aws/en/dev-tools/databricks-apps/app-runtime
-```yaml
-command: ["python", "app.py"]
-env:
-  - name: 'DATABRICKS_HOST'
-    value: <Databricks Workspace URL>
-  - name: 'DASHBOARD_ID'
-    value: <Optional Dashboard Id for Integration>
-  - name: 'POSTGRES_SCHEMA'
-    value: 'inventory_app'
-  - name: 'POSTGRES_TABLE'
-    value: 'inventory_items'
+### Common Issues:
+
+1. **Database Connection Errors**: 
+   - Verify the database resource is added with "Can Connect" permission
+   - Check that your PGUSER has proper OAuth identity mapping in the database
+
+2. **Secret Key Errors**:
+   - Ensure the secret scope resource is added with "Can Read" permission
+   - Verify the SECRET_KEY exists in the secret scope
+
+3. **Table Creation Issues**:
+   - The app automatically creates the schema and table on first run
+   - Ensure your database user has CREATE privileges
+
+### OAuth Identity Mapping:
+
+If you encounter OAuth identity mismatch errors, run this SQL in your Lakebase instance:
+
+```sql
+-- Replace with your actual email and service principal ID
+ALTER ROLE "your_username@domain.com" 
+SET databricks.oauth.identity = 'your-app-service-principal-id';
 ```
