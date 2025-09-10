@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}AI Assistant (Genie) - Equipment Inventory{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-robot"></i> AI Assistant (Genie)</h1>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Inventory
+                </a>
+                <button class="btn btn-outline-danger" onclick="clearAllConversations()">
+                    <i class="fas fa-trash"></i> Clear All
+                </button>
+            </div>
+        </div>
+
+        {% if not genie_configured %}
+        <!-- Configuration Warning -->
+        <div class="alert alert-warning" role="alert">
+            <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Genie Not Configured</h4>
+            <p>To use the AI Assistant, please set the <code>GENIE_SPACE_ID</code> environment variable with your Databricks Genie space ID.</p>
+            <hr>
+            <p class="mb-0">You can find your Genie space ID in the Databricks Genie UI URL as <code>rooms/SPACE-ID?o=</code></p>
+        </div>
+        {% else %}
+        <!-- Main Genie Interface -->
+        <div class="row">
+            <!-- Chat Interface -->
+            <div class="col-lg-8">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-comments"></i> Chat with AI Assistant</h5>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary" onclick="toggleConversationHistory()">
+                                <i class="fas fa-history"></i> History
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="refreshSuggestions()">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <!-- Conversation Display -->
+                        <div id="conversationContainer" class="p-3" style="height: 500px; overflow-y: auto; background-color: #f8f9fa;">
+                            <div id="conversationMessages">
+                                <div class="text-center text-muted">
+                                    <i class="fas fa-robot fa-2x mb-2"></i>
+                                    <p>Ask me anything about your inventory data!</p>
+                                    <small>Try asking: "What are the top 10 items by inventory value?"</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Input Area -->
+                        <div class="border-top p-3">
+                            <div class="input-group">
+                                <input type="text" id="messageInput" class="form-control" placeholder="Ask about your inventory data..." 
+                                       onkeypress="handleKeyPress(event)">
+                                <button class="btn btn-primary" type="button" onclick="sendMessage()" id="sendButton">
+                                    <i class="fas fa-paper-plane"></i> Send
+                                </button>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle"></i> 
+                                    I can help you analyze inventory data, generate reports, and answer questions about your equipment.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="col-lg-4">
+                <!-- Suggested Queries -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-lightbulb"></i> Suggested Queries</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="suggestedQueries">
+                            {% for query in suggested_queries %}
+                            <button class="btn btn-outline-primary btn-sm mb-2 w-100 text-start" 
+                                    onclick="useSuggestedQuery('{{ query }}')" 
+                                    style="font-size: 0.85rem;">
+                                <i class="fas fa-question-circle"></i> {{ query }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation History -->
+                <div class="card mb-3" id="conversationHistoryCard" style="display: none;">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-history"></i> Conversation History</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="conversationHistory">
+                            <p class="text-muted small">No conversations yet</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-chart-bar"></i> Quick Stats</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h5 class="text-primary" id="totalConversations">0</h5>
+                                <small class="text-muted">Conversations</small>
+                            </div>
+                            <div class="col-6">
+                                <h5 class="text-success" id="totalQueries">0</h5>
+                                <small class="text-muted">Queries Run</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Results Modal -->
+        <div class="modal fade" id="queryResultsModal" tabindex="-1" aria-labelledby="queryResultsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="queryResultsModalLabel">
+                            <i class="fas fa-table"></i> Query Results
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="queryResultsContent">
+                            <!-- Query results will be displayed here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" onclick="exportQueryResults()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentConversationId = null;
+let conversationHistory = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadConversationHistory();
+    updateStats();
+});
+
+function handleKeyPress(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+}
+
+async function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    // Disable input while processing
+    input.disabled = true;
+    document.getElementById('sendButton').disabled = true;
+    
+    // Add user message to conversation
+    addMessageToConversation('user', message);
+    input.value = '';
+    
+    try {
+        let response;
+        
+        if (!currentConversationId) {
+            // Start new conversation
+            response = await fetch('/api/genie/start-conversation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt: message })
+            });
+        } else {
+            // Send message to existing conversation
+            response = await fetch('/api/genie/send-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    conversation_id: currentConversationId, 
+                    message: message 
+                })
+            });
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            currentConversationId = result.conversation_id;
+            displayGenieResponse(result.response);
+            updateConversationHistory();
+        } else {
+            showError('Failed to get response: ' + result.error);
+        }
+        
+    } catch (error) {
+        console.error('Error:', error);
+        showError('Network error: ' + error.message);
+    } finally {
+        // Re-enable input
+        input.disabled = false;
+        document.getElementById('sendButton').disabled = false;
+        input.focus();
+    }
+}
+
+function addMessageToConversation(role, content) {
+    const container = document.getElementById('conversationMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `mb-3 ${role === 'user' ? 'text-end' : 'text-start'}`;
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = `d-inline-block p-3 rounded ${
+        role === 'user' ? 'bg-primary text-white' : 'bg-white border'
+    }`;
+    messageContent.style.maxWidth = '80%';
+    
+    if (role === 'user') {
+        messageContent.innerHTML = `<i class="fas fa-user me-2"></i>${content}`;
+    } else {
+        messageContent.innerHTML = `<i class="fas fa-robot me-2"></i>${content}`;
+    }
+    
+    messageDiv.appendChild(messageContent);
+    container.appendChild(messageDiv);
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+function displayGenieResponse(response) {
+    // Display text content
+    if (response.text_content && response.text_content.length > 0) {
+        response.text_content.forEach(textItem => {
+            addMessageToConversation('assistant', textItem.content);
+        });
+    }
+    
+    // Display queries and results
+    if (response.queries && response.queries.length > 0) {
+        response.queries.forEach((query, index) => {
+            const queryDiv = document.createElement('div');
+            queryDiv.className = 'mb-3 text-start';
+            
+            const queryContent = document.createElement('div');
+            queryContent.className = 'bg-white border p-3 rounded';
+            queryContent.style.maxWidth = '80%';
+            
+            queryContent.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="mb-0"><i class="fas fa-database"></i> Query ${index + 1}</h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="showQueryDetails('${query.statement_id}')">
+                        <i class="fas fa-eye"></i> Details
+                    </button>
+                </div>
+                <p class="mb-2">${query.description}</p>
+                <small class="text-muted">
+                    <i class="fas fa-code"></i> Generated SQL
+                </small>
+            `;
+            
+            queryDiv.appendChild(queryContent);
+            document.getElementById('conversationMessages').appendChild(queryDiv);
+            
+            // Show data if available
+            const dataFrame = response.data_frames.find(df => df.statement_id === query.statement_id);
+            if (dataFrame) {
+                showQueryData(dataFrame, query.statement_id);
+            }
+        });
+    }
+}
+
+function showQueryData(dataFrame, statementId) {
+    const container = document.getElementById('conversationMessages');
+    const dataDiv = document.createElement('div');
+    dataDiv.className = 'mb-3 text-start';
+    
+    const dataContent = document.createElement('div');
+    dataContent.className = 'bg-light border p-3 rounded';
+    dataContent.style.maxWidth = '80%';
+    
+    dataContent.innerHTML = `
+        <h6><i class="fas fa-table"></i> Query Results (${dataFrame.shape[0]} rows, ${dataFrame.shape[1]} columns)</h6>
+        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-sm table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        ${dataFrame.columns.map(col => `<th>${col}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${dataFrame.data.slice(0, 10).map(row => 
+                        `<tr>${dataFrame.columns.map(col => `<td>${row[col] || ''}</td>`).join('')}</tr>`
+                    ).join('')}
+                </tbody>
+            </table>
+        </div>
+        ${dataFrame.data.length > 10 ? `<small class="text-muted">Showing first 10 rows of ${dataFrame.data.length} total</small>` : ''}
+        <div class="mt-2">
+            <button class="btn btn-sm btn-primary" onclick="showFullQueryResults('${statementId}')">
+                <i class="fas fa-expand"></i> View Full Results
+            </button>
+        </div>
+    `;
+    
+    dataDiv.appendChild(dataContent);
+    container.appendChild(dataDiv);
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+function showFullQueryResults(statementId) {
+    // This would show the full results in a modal
+    // For now, just show an alert
+    alert('Full query results would be displayed in a modal here');
+}
+
+function useSuggestedQuery(query) {
+    document.getElementById('messageInput').value = query;
+    document.getElementById('messageInput').focus();
+}
+
+function showError(message) {
+    const container = document.getElementById('conversationMessages');
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'mb-3 text-start';
+    
+    const errorContent = document.createElement('div');
+    errorContent.className = 'bg-danger text-white p-3 rounded';
+    errorContent.style.maxWidth = '80%';
+    errorContent.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${message}`;
+    
+    errorDiv.appendChild(errorContent);
+    container.appendChild(errorDiv);
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+async function loadConversationHistory() {
+    try {
+        const response = await fetch('/api/genie/conversations');
+        const conversations = await response.json();
+        conversationHistory = conversations;
+        updateConversationHistory();
+    } catch (error) {
+        console.error('Error loading conversation history:', error);
+    }
+}
+
+function updateConversationHistory() {
+    const container = document.getElementById('conversationHistory');
+    
+    if (Object.keys(conversationHistory).length === 0) {
+        container.innerHTML = '<p class="text-muted small">No conversations yet</p>';
+        return;
+    }
+    
+    container.innerHTML = Object.values(conversationHistory).map(conv => `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+                <small class="fw-bold">${conv.messages[0]?.content?.substring(0, 50)}...</small>
+                <br>
+                <small class="text-muted">${new Date(conv.created_at * 1000).toLocaleString()}</small>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" onclick="loadConversation('${conv.conversation_id}')">
+                <i class="fas fa-eye"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function toggleConversationHistory() {
+    const card = document.getElementById('conversationHistoryCard');
+    card.style.display = card.style.display === 'none' ? 'block' : 'none';
+}
+
+function refreshSuggestions() {
+    // Reload the page to get fresh suggestions
+    window.location.reload();
+}
+
+function clearAllConversations() {
+    if (confirm('Are you sure you want to clear all conversations?')) {
+        fetch('/api/genie/clear-all-conversations', { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    conversationHistory = {};
+                    currentConversationId = null;
+                    document.getElementById('conversationMessages').innerHTML = `
+                        <div class="text-center text-muted">
+                            <i class="fas fa-robot fa-2x mb-2"></i>
+                            <p>Ask me anything about your inventory data!</p>
+                            <small>Try asking: "What are the top 10 items by inventory value?"</small>
+                        </div>
+                    `;
+                    updateConversationHistory();
+                    updateStats();
+                }
+            })
+            .catch(error => {
+                console.error('Error clearing conversations:', error);
+                alert('Failed to clear conversations');
+            });
+    }
+}
+
+function updateStats() {
+    const totalConversations = Object.keys(conversationHistory).length;
+    const totalQueries = Object.values(conversationHistory).reduce((sum, conv) => 
+        sum + conv.responses.reduce((rSum, resp) => rSum + (resp.queries?.length || 0), 0), 0
+    );
+    
+    document.getElementById('totalConversations').textContent = totalConversations;
+    document.getElementById('totalQueries').textContent = totalQueries;
+}
+</script>
+{% endblock %}
