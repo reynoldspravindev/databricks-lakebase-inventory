@@ -62,36 +62,54 @@ class GenieService:
         
         try:
             for attachment in response.attachments:
-                if attachment.text:
+                if hasattr(attachment, 'text') and attachment.text:
                     processed_response['text_content'].append({
                         'content': attachment.text.content,
                         'type': 'text'
                     })
-                elif attachment.query:
+                elif hasattr(attachment, 'query') and attachment.query:
+                    # Debug: Print available attributes
+                    print(f"Query attachment attributes: {dir(attachment.query)}")
+                    
                     # Get query description and generated SQL
                     query_info = {
-                        'description': attachment.query.description,
-                        'generated_sql': attachment.query.query,
-                        'statement_id': attachment.query.statement_id,
+                        'description': getattr(attachment.query, 'description', 'No description available'),
+                        'generated_sql': getattr(attachment.query, 'query', 'No query available'),
                         'type': 'query'
                     }
-                    processed_response['queries'].append(query_info)
                     
-                    # Execute query and get data
-                    df = self.get_query_result(attachment.query.statement_id)
-                    if df is not None:
-                        processed_response['data_frames'].append({
-                            'data': df.to_dict('records'),
-                            'columns': df.columns.tolist(),
-                            'shape': df.shape,
-                            'statement_id': attachment.query.statement_id
-                        })
-                        processed_response['generated_code'].append(attachment.query.query)
+                    # Try to get statement_id from different possible attributes
+                    statement_id = None
+                    for attr in ['statement_id', 'id', 'statementId', 'query_id']:
+                        if hasattr(attachment.query, attr):
+                            statement_id = getattr(attachment.query, attr)
+                            break
+                    
+                    if statement_id:
+                        query_info['statement_id'] = statement_id
+                        processed_response['queries'].append(query_info)
+                        
+                        # Execute query and get data
+                        df = self.get_query_result(statement_id)
+                        if df is not None:
+                            processed_response['data_frames'].append({
+                                'data': df.to_dict('records'),
+                                'columns': df.columns.tolist(),
+                                'shape': df.shape,
+                                'statement_id': statement_id
+                            })
+                            processed_response['generated_code'].append(attachment.query.query)
+                    else:
+                        # Add query info without statement_id
+                        processed_response['queries'].append(query_info)
+                        print(f"Warning: Could not find statement_id in query attachment")
             
             return processed_response
             
         except Exception as e:
             print(f"Error processing Genie response: {e}")
+            import traceback
+            traceback.print_exc()
             return processed_response
     
     def start_conversation(self, prompt: str) -> Dict[str, Any]:
@@ -106,11 +124,17 @@ class GenieService:
             }
         
         try:
+            print(f"Starting Genie conversation with prompt: {prompt}")
+            print(f"Using Genie space ID: {self.genie_space_id}")
+            
             # Start conversation
             conversation = self.workspace_client.genie.start_conversation_and_wait(
                 self.genie_space_id, 
                 prompt
             )
+            
+            print(f"Conversation started with ID: {conversation.conversation_id}")
+            print(f"Response attachments: {len(conversation.attachments) if hasattr(conversation, 'attachments') else 'No attachments'}")
             
             # Process the response
             processed_response = self.process_genie_response(conversation)
@@ -139,6 +163,8 @@ class GenieService:
             
         except Exception as e:
             print(f"Error starting Genie conversation: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'success': False,
                 'error': f'Failed to start conversation: {str(e)}'
@@ -162,12 +188,16 @@ class GenieService:
             }
         
         try:
+            print(f"Sending message to conversation {conversation_id}: {message}")
+            
             # Send message to existing conversation
             follow_up_conversation = self.workspace_client.genie.create_message_and_wait(
                 self.genie_space_id,
                 conversation_id,
                 message
             )
+            
+            print(f"Message sent successfully. Response attachments: {len(follow_up_conversation.attachments) if hasattr(follow_up_conversation, 'attachments') else 'No attachments'}")
             
             # Process the response
             processed_response = self.process_genie_response(follow_up_conversation)
@@ -191,6 +221,8 @@ class GenieService:
             
         except Exception as e:
             print(f"Error sending message to Genie: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'success': False,
                 'error': f'Failed to send message: {str(e)}'

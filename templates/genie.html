@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}AI Assistant (Genie) - Equipment Inventory{% endblock %}
+{% block title %}Inventory Assistant - Equipment Inventory{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-robot"></i> AI Assistant (Genie)</h1>
+            <h1><i class="fas fa-robot"></i> Inventory Assistant</h1>
             <div>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">
                     <i class="fas fa-arrow-left"></i> Back to Inventory
@@ -20,8 +20,8 @@
         {% if not genie_configured %}
         <!-- Configuration Warning -->
         <div class="alert alert-warning" role="alert">
-            <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Genie Not Configured</h4>
-            <p>To use the AI Assistant, please set the <code>GENIE_SPACE_ID</code> environment variable with your Databricks Genie space ID.</p>
+            <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Inventory Assistant Not Configured</h4>
+            <p>To use the Inventory Assistant, please set the <code>GENIE_SPACE_ID</code> environment variable with your Databricks Genie space ID.</p>
             <hr>
             <p class="mb-0">You can find your Genie space ID in the Databricks Genie UI URL as <code>rooms/SPACE-ID?o=</code></p>
         </div>
@@ -275,12 +275,17 @@ function displayGenieResponse(response) {
             queryContent.className = 'bg-white border p-3 rounded';
             queryContent.style.maxWidth = '80%';
             
+            const hasStatementId = query.statement_id && query.statement_id !== 'undefined';
+            const detailsButton = hasStatementId ? 
+                `<button class="btn btn-sm btn-outline-primary" onclick="showQueryDetails('${query.statement_id}')">
+                    <i class="fas fa-eye"></i> Details
+                </button>` : 
+                `<span class="text-muted small">No execution details available</span>`;
+            
             queryContent.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <h6 class="mb-0"><i class="fas fa-database"></i> Query ${index + 1}</h6>
-                    <button class="btn btn-sm btn-outline-primary" onclick="showQueryDetails('${query.statement_id}')">
-                        <i class="fas fa-eye"></i> Details
-                    </button>
+                    ${detailsButton}
                 </div>
                 <p class="mb-2">${query.description}</p>
                 <small class="text-muted">
@@ -291,10 +296,12 @@ function displayGenieResponse(response) {
             queryDiv.appendChild(queryContent);
             document.getElementById('conversationMessages').appendChild(queryDiv);
             
-            // Show data if available
-            const dataFrame = response.data_frames.find(df => df.statement_id === query.statement_id);
-            if (dataFrame) {
-                showQueryData(dataFrame, query.statement_id);
+            // Show data if available and has statement_id
+            if (hasStatementId) {
+                const dataFrame = response.data_frames.find(df => df.statement_id === query.statement_id);
+                if (dataFrame) {
+                    showQueryData(dataFrame, query.statement_id);
+                }
             }
         });
     }
