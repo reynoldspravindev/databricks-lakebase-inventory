@@ -15,7 +15,12 @@ class GenieService:
     
     def __init__(self, workspace_client: sdk.WorkspaceClient):
         self.workspace_client = workspace_client
-        self.genie_space_id = os.getenv('GENIE_SPACE_ID')
+        # Try to get from config first, then fall back to environment variable
+        try:
+            from config import config
+            self.genie_space_id = config.get_genie_space_id()
+        except ImportError:
+            self.genie_space_id = os.getenv('GENIE_SPACE_ID')
         self.conversations = {}  # Store active conversations
         
     def is_configured(self) -> bool:

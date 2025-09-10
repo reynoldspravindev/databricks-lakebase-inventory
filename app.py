@@ -10,6 +10,7 @@ from psycopg import sql
 from psycopg_pool import ConnectionPool
 from werkzeug.utils import secure_filename
 from genie_service import GenieService
+from config import config
 
 # Database connection setup
 workspace_client = sdk.WorkspaceClient()
@@ -19,6 +20,9 @@ connection_pool = None
 
 # Initialize Genie service
 genie_service = GenieService(workspace_client)
+
+# Print configuration summary on startup
+config.print_config_summary()
 
 # CSV upload configuration
 ALLOWED_EXTENSIONS = {'csv'}
@@ -371,19 +375,14 @@ def get_low_stock_items():
 def get_dashboard_embed_url():
     """Generate dashboard embed URL with proper authentication."""
     try:
-        # Get workspace URL from environment or workspace client
-        workspace_url = os.getenv('DATABRICKS_HOST') or workspace_client.config.host
-        dashboard_id = os.getenv('DASHBOARD_ID')  # Set this in your environment
+        # Get URL from configuration
+        embed_url = config.get_dashboard_embed_url()
         
-        if not dashboard_id:
+        if not embed_url:
             return None
-            
-        # Construct embed URL
-        base_url = workspace_url.rstrip('/')
-        embed_url = f"{base_url}/dashboardsv3/{dashboard_id}/embed"
         
-        # Add authentication parameters
-        if refresh_oauth_token():
+        # Add authentication parameters if available
+        if refresh_oauth_token() and postgres_password:
             embed_url += f"?access_token={postgres_password}"
         
         return embed_url
@@ -394,14 +393,7 @@ def get_dashboard_embed_url():
 def get_dashboard_public_url():
     """Get the public dashboard URL for opening in new tab."""
     try:
-        workspace_url = os.getenv('DATABRICKS_HOST') or workspace_client.config.host
-        dashboard_id = os.getenv('DASHBOARD_ID')
-        
-        if not dashboard_id:
-            return None
-            
-        base_url = workspace_url.rstrip('/')
-        return f"{base_url}/dashboardsv3/{dashboard_id}"
+        return config.get_dashboard_public_url()
     except Exception as e:
         print(f"Dashboard public URL error: {e}")
         return None
@@ -590,6 +582,14 @@ def dashboard_route():
     dashboard_url = get_dashboard_public_url()
     low_stock_items = get_low_stock_items()
     
+    # Debug information
+    print(f"Dashboard Debug Info:")
+    print(f"  DASHBOARD_ID: {os.getenv('DASHBOARD_ID')}")
+    print(f"  DATABRICKS_HOST: {os.getenv('DATABRICKS_HOST')}")
+    print(f"  Workspace URL: {workspace_client.config.host}")
+    print(f"  Embed URL: {dashboard_embed_url}")
+    print(f"  Public URL: {dashboard_url}")
+    
     if not dashboard_embed_url:
         flash('Dashboard not configured. Please set DASHBOARD_ID environment variable.', 'warning')
         return redirect(url_for('index'))
@@ -646,6 +646,12 @@ def genie_route():
     """Main Genie interface page."""
     low_stock_items = get_low_stock_items()
     suggested_queries = genie_service.get_suggested_queries() if genie_service.is_configured() else []
+    
+    # Debug information
+    print(f"Genie Debug Info:")
+    print(f"  GENIE_SPACE_ID: {os.getenv('GENIE_SPACE_ID')}")
+    print(f"  Genie configured: {genie_service.is_configured()}")
+    print(f"  Suggested queries count: {len(suggested_queries)}")
     
     return render_template('genie.html', 
                          low_stock_count=len(low_stock_items),
