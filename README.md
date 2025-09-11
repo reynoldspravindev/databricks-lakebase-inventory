@@ -127,7 +127,7 @@ env:
   - name: PGAPPNAME
     value: "inventory_app"
   
-  # Schema and table configuration
+  # Schema and table configuration. When not passed defaults to "inventory_app" and "inventory_items" respy.
   - name: POSTGRES_SCHEMA
     value: "inventory_app"
   - name: POSTGRES_TABLE
@@ -137,23 +137,11 @@ env:
   - name: PORT
     value: "8080"
   
-  # Databricks configuration (optional - for dashboard integration)
+  # Databricks configuration (for dashboard integration)
   - name: DATABRICKS_HOST
     value: "https://your-workspace.cloud.databricks.com"
   - name: DASHBOARD_ID
-    value: "your-dashboard-uuid"  # Optional
-
-# Resources
-resources:
-  # Lakebase database resource
-  - name: databricks_postgres
-    key: databricks_postgres
-    permission: CAN_CONNECT
-  
-  # Secret scope for Flask key
-  - name: app-secrets
-    key: app-secrets
-    permission: CAN_READ
+    value: "your-dashboard-uuid"  
 ```
 
 ### Step 4: Deploy Your App
