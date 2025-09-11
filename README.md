@@ -84,11 +84,15 @@ When creating your Databricks App, you need to add your Lakebase database as an 
    - **Resource Key**: `app-secrets`
    - **Permission**: Select **"Can Read"**
    - **Secret Scope**: Select `app-secrets` from the dropdown
+
   
 ### Step 3(option 1): Clone the repo on the Databricks Workspace as a git folder. 
    - This will be the value for <your app deployment workspace path for source code> below
 
-### Step 3(option 2): Clone the repo locally. And deploy the app using Databricks CLI as mentioned in Step 5
+
+### Step 3(option 2): Clone the repo locally. 
+   - Deploy the app using Databricks CLI as mentioned in Step 5
+
 
 ### Step 4: Configure Your app.yaml 
 
@@ -134,7 +138,7 @@ env:
 
 ### Step 5: Deploy Your App. 
 
-# Applicable if option 2 of step 3 is chosen.
+#### Applicable if option 2 of step 3 is chosen.
 ```bash
 # Using Databricks CLI
 # Optional Continuous Sync
@@ -147,7 +151,7 @@ databricks apps deploy <app name> --source-code-path <your app deployment worksp
 # Upload your code and app.yaml through the Apps interface
 ```
 
-# If option 1 of step 3 is chosen, then just simply deploy the app from UI or via CLI.
+#### If option 1 of step 3 is chosen, then just simply deploy the app from UI or via CLI.
 
 ### Step 6: Verify App Resources
 
