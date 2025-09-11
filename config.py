@@ -37,11 +37,6 @@ class Config:
         env_mappings = {
             'DATABRICKS_HOST': ['databricks', 'host'],
             'DASHBOARD_ID': ['databricks', 'dashboard_id'],
-            'PGHOST': ['database', 'host'],
-            'PGPORT': ['database', 'port'],
-            'PGDATABASE': ['database', 'database'],
-            'PGUSER': ['database', 'user'],
-            'PGSSLMODE': ['database', 'ssl_mode'],
             'SECRET_KEY': ['app', 'secret_key'],
             'PORT': ['app', 'port'],
             'DEBUG': ['app', 'debug']
@@ -120,15 +115,6 @@ class Config:
         """Check if dashboard is configured."""
         return self.get_dashboard_embed_url() is not None
     
-    def get_database_config(self) -> Dict[str, Any]:
-        """Get database configuration."""
-        return {
-            'host': self.get('database.host'),
-            'port': self.get('database.port', 5432),
-            'database': self.get('database.database'),
-            'user': self.get('database.user'),
-            'ssl_mode': self.get('database.ssl_mode', 'require')
-        }
     
     def print_config_summary(self):
         """Print a summary of the current configuration."""
@@ -136,7 +122,6 @@ class Config:
         print(f"  Dashboard configured: {self.is_dashboard_configured()}")
         print(f"  Databricks host: {self.get('databricks.host', 'Not set')}")
         print(f"  Dashboard ID: {self.get('databricks.dashboard_id', 'Not set')}")
-        print(f"  Database host: {self.get('database.host', 'Not set')}")
 
 # Global config instance
 config = Config()
