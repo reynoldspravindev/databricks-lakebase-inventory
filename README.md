@@ -138,7 +138,7 @@ env:
 
 ### Step 5: Deploy Your App. 
 
-#### Applicable if option 2 of step 3 is chosen.
+Option 1: Applicable if option 2 of step 3 is chosen.
 ```bash
 # Using Databricks CLI
 # Optional Continuous Sync
@@ -151,7 +151,7 @@ databricks apps deploy <app name> --source-code-path <your app deployment worksp
 # Upload your code and app.yaml through the Apps interface
 ```
 
-#### If option 1 of step 3 is chosen, then just simply deploy the app from UI or via CLI.
+Option 2: If option 1 of step 3 is chosen, then just simply deploy the app from UI or via CLI.
 
 ### Step 6: Verify App Resources
 
