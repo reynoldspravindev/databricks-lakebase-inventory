@@ -9,7 +9,6 @@ from databricks import sdk
 from psycopg import sql
 from psycopg_pool import ConnectionPool
 from werkzeug.utils import secure_filename
-from genie_service import GenieService
 from config import config
 
 # Database connection setup
@@ -18,8 +17,6 @@ postgres_password = None
 last_password_refresh = 0
 connection_pool = None
 
-# Initialize Genie service
-genie_service = GenieService(workspace_client)
 
 # Print configuration summary on startup
 config.print_config_summary()
@@ -640,102 +637,6 @@ def api_dashboard_config():
         'configured': get_dashboard_embed_url() is not None
     })
 
-# Genie Routes
-@app.route('/genie')
-def genie_route():
-    """Main Genie interface page."""
-    low_stock_items = get_low_stock_items()
-    suggested_queries = genie_service.get_suggested_queries() if genie_service.is_configured() else []
-    
-    # Debug information
-    print(f"Genie Debug Info:")
-    print(f"  GENIE_SPACE_ID: {os.getenv('GENIE_SPACE_ID')}")
-    print(f"  Genie configured: {genie_service.is_configured()}")
-    print(f"  Suggested queries count: {len(suggested_queries)}")
-    
-    return render_template('genie.html', 
-                         low_stock_count=len(low_stock_items),
-                         suggested_queries=suggested_queries,
-                         genie_configured=genie_service.is_configured())
-
-@app.route('/api/genie/start-conversation', methods=['POST'])
-def api_start_conversation():
-    """Start a new Genie conversation."""
-    data = request.get_json()
-    prompt = data.get('prompt', '').strip()
-    
-    if not prompt:
-        return jsonify({'success': False, 'error': 'Prompt is required'}), 400
-    
-    result = genie_service.start_conversation(prompt)
-    return jsonify(result)
-
-@app.route('/api/genie/send-message', methods=['POST'])
-def api_send_message():
-    """Send a message to an existing Genie conversation."""
-    data = request.get_json()
-    conversation_id = data.get('conversation_id')
-    message = data.get('message', '').strip()
-    
-    if not conversation_id:
-        return jsonify({'success': False, 'error': 'Conversation ID is required'}), 400
-    
-    if not message:
-        return jsonify({'success': False, 'error': 'Message is required'}), 400
-    
-    result = genie_service.send_message(conversation_id, message)
-    return jsonify(result)
-
-@app.route('/api/genie/conversation/<conversation_id>')
-def api_get_conversation(conversation_id):
-    """Get conversation details."""
-    conversation = genie_service.get_conversation(conversation_id)
-    if not conversation:
-        return jsonify({'error': 'Conversation not found'}), 404
-    
-    return jsonify(conversation)
-
-@app.route('/api/genie/conversations')
-def api_get_all_conversations():
-    """Get all active conversations."""
-    conversations = genie_service.get_all_conversations()
-    return jsonify(conversations)
-
-@app.route('/api/genie/conversation/<conversation_id>/summary')
-def api_get_conversation_summary(conversation_id):
-    """Get conversation summary."""
-    summary = genie_service.get_conversation_summary(conversation_id)
-    if 'error' in summary:
-        return jsonify(summary), 404
-    
-    return jsonify(summary)
-
-@app.route('/api/genie/clear-conversation/<conversation_id>', methods=['DELETE'])
-def api_clear_conversation(conversation_id):
-    """Clear a specific conversation."""
-    success = genie_service.clear_conversation(conversation_id)
-    return jsonify({'success': success})
-
-@app.route('/api/genie/clear-all-conversations', methods=['DELETE'])
-def api_clear_all_conversations():
-    """Clear all conversations."""
-    count = genie_service.clear_all_conversations()
-    return jsonify({'success': True, 'cleared_count': count})
-
-@app.route('/api/genie/suggested-queries')
-def api_get_suggested_queries():
-    """Get suggested queries for inventory analysis."""
-    queries = genie_service.get_suggested_queries()
-    return jsonify(queries)
-
-@app.route('/api/genie/config')
-def api_genie_config():
-    """Get Genie configuration status."""
-    return jsonify({
-        'configured': genie_service.is_configured(),
-        'space_id': os.getenv('GENIE_SPACE_ID'),
-        'workspace_url': os.getenv('DATABRICKS_HOST') or workspace_client.config.host
-    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 8080))) 

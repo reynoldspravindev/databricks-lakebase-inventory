@@ -37,7 +37,6 @@ class Config:
         env_mappings = {
             'DATABRICKS_HOST': ['databricks', 'host'],
             'DASHBOARD_ID': ['databricks', 'dashboard_id'],
-            'GENIE_SPACE_ID': ['databricks', 'genie_space_id'],
             'PGHOST': ['database', 'host'],
             'PGPORT': ['database', 'port'],
             'PGDATABASE': ['database', 'database'],
@@ -117,17 +116,9 @@ class Config:
         base_url = host.rstrip('/')
         return f"{base_url}/dashboardsv3/{dashboard_id}"
     
-    def get_genie_space_id(self) -> Optional[str]:
-        """Get the Genie space ID."""
-        return self.get('databricks.genie_space_id')
-    
     def is_dashboard_configured(self) -> bool:
         """Check if dashboard is configured."""
         return self.get_dashboard_embed_url() is not None
-    
-    def is_genie_configured(self) -> bool:
-        """Check if Genie is configured."""
-        return self.get_genie_space_id() is not None
     
     def get_database_config(self) -> Dict[str, Any]:
         """Get database configuration."""
@@ -143,10 +134,8 @@ class Config:
         """Print a summary of the current configuration."""
         print("📋 Configuration Summary:")
         print(f"  Dashboard configured: {self.is_dashboard_configured()}")
-        print(f"  Genie configured: {self.is_genie_configured()}")
         print(f"  Databricks host: {self.get('databricks.host', 'Not set')}")
         print(f"  Dashboard ID: {self.get('databricks.dashboard_id', 'Not set')}")
-        print(f"  Genie Space ID: {self.get('databricks.genie_space_id', 'Not set')}")
         print(f"  Database host: {self.get('database.host', 'Not set')}")
 
 # Global config instance

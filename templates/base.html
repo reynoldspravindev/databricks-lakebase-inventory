@@ -79,19 +79,11 @@
                             {% endif %}
                         </a>
                     </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="analyticsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-chart-line"></i> Analytics
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="analyticsDropdown">
-                            <li><a class="dropdown-item" href="{{ url_for('dashboard_route') }}">
-                                <i class="fas fa-tachometer-alt"></i> Dashboard
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('genie_route') }}">
-                                <i class="fas fa-robot"></i> Inventory Assistant
-                            </a></li>
-                        </ul>
-                    </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('dashboard_route') }}">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a>
+                </li>
                 </ul>
             </div>
         </div>
