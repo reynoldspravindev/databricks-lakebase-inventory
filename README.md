@@ -178,7 +178,7 @@ After deployment, verify that your app has access to:
 2. **Secret Access**: The app should be able to read the Flask secret key from the secret scope
 3. **Table Creation**: The app will automatically create the `inventory_app.inventory_items` table on first run
 
-## 📊 CSV Upload Features
+## CSV Upload Features
 
 - **Bulk Upload**: Add multiple items at once via CSV
 - **Data Validation**: Comprehensive validation with detailed error reporting
@@ -209,7 +209,7 @@ Use the included `sample_inventory.csv` for testing:
 - Mix of high and low-value items
 - Some items with low stock alerts
 
-## ⚠️ Important Notes
+## Important Notes
 
 - **CSV uploads only ADD new items** - they don't update or delete existing items
 - **Data validation is strict** - invalid rows are skipped with detailed error messages
