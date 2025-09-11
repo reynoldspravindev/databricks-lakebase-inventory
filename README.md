@@ -29,12 +29,6 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 - **Row- and Column-Level Security**: Enforce granular permissions on inventory records via Unity Catalog, even within Lakebase tables.
 - **Auditability**: All user actions and data changes are logged for compliance and traceability.
 
-## Built for the Databricks Lakehouse Era
-
-This project exemplifies the next generation of data-driven applications, harnessing the Databricks Lakehouse, Lakebase (Managed Postgres), Unity Catalog, and secure app embedding to deliver actionable insights and operational excellence for inventory management.
-
-For a deep dive into the Databricks dashboard integration, Lakebase setup, and security architecture, see `DASHBOARD_INTEGRATION_SUMMARY.md` and `DASHBOARD_SETUP.md`.
-
 ## Quick Start
 
 ### Prerequisites
@@ -64,7 +58,7 @@ python app_local.py
 python app.py
 ```
 
-## 🚀 Databricks App Deployment
+## Databricks App Deployment
 
 ### Step 1: Set Up Lakebase Database Resource
 
@@ -193,7 +187,7 @@ After deployment, verify that your app has access to:
 - **Error Handling**: Skip invalid rows, process valid ones
 - **File Size Limit**: 16MB maximum file size
 
-### 📋 CSV Format Requirements:
+### CSV Format Requirements:
 
 #### Required Columns:
 - `item_name` (max 100 characters)
@@ -207,21 +201,13 @@ After deployment, verify that your app has access to:
 - `location` (max 100 characters)
 - `minimum_stock` (integer ≥ 0)
 
-## 📄 Sample Data
+## Sample Data
 
 Use the included `sample_inventory.csv` for testing:
 - 10 different equipment items
 - Various categories (Electronics, Furniture, Safety Equipment, Office Supplies)
 - Mix of high and low-value items
 - Some items with low stock alerts
-
-## 🔧 Switching Between Versions
-
-To change which app version you're using:
-
-1. **For YAML/Docker deployments**: Update your configuration to point to the desired Python file
-2. **For local development**: Simply run the appropriate Python file
-3. **All versions share the same templates**, so no additional setup needed
 
 ## ⚠️ Important Notes
 
@@ -231,7 +217,7 @@ To change which app version you're using:
 - **Templates are automatically generated** with the latest format requirements
 - **App Resources are required** for Databricks App deployment - ensure both database and secret scope resources are properly configured
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues:
 
