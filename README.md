@@ -40,23 +40,6 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 - **Databricks dashboard** (Optional. For embedded analytics; see `DASHBOARD_SETUP.md`)
 - **Databricks Secret Scope** For the Flask key. 
 
-### For Local Development (Recommended):
-```bash
-# Activate your virtual environment
-source venv/bin/activate
-
-# Run the local version with CSV upload
-python app_local.py
-```
-
-### For Production (PostgreSQL):
-```bash
-# Set your environment variables first:
-# PGDATABASE, PGUSER, PGHOST, PGPORT, etc.
-
-# Run the PostgreSQL version with CSV upload
-python app.py
-```
 
 ## Databricks App Deployment
 
