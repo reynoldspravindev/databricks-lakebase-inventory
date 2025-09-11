@@ -275,12 +275,19 @@ function displayGenieResponse(response) {
             queryContent.className = 'bg-white border p-3 rounded';
             queryContent.style.maxWidth = '80%';
             
-            const hasStatementId = query.statement_id && query.statement_id !== 'undefined';
-            const detailsButton = hasStatementId ? 
-                `<button class="btn btn-sm btn-outline-primary" onclick="showQueryDetails('${query.statement_id}')">
+            const hasStatementId = query.statement_id && query.statement_id !== 'undefined' && query.statement_id !== 'direct_execution';
+            const isDirectExecution = query.statement_id === 'direct_execution';
+            
+            let detailsButton;
+            if (hasStatementId) {
+                detailsButton = `<button class="btn btn-sm btn-outline-primary" onclick="showQueryDetails('${query.statement_id}')">
                     <i class="fas fa-eye"></i> Details
-                </button>` : 
-                `<span class="text-muted small">No execution details available</span>`;
+                </button>`;
+            } else if (isDirectExecution) {
+                detailsButton = `<span class="text-success small"><i class="fas fa-database"></i> Executed directly</span>`;
+            } else {
+                detailsButton = `<span class="text-muted small">No execution details available</span>`;
+            }
             
             queryContent.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -301,12 +308,13 @@ ${query.generated_sql || 'No SQL generated'}
             queryDiv.appendChild(queryContent);
             document.getElementById('conversationMessages').appendChild(queryDiv);
             
-            // Show data if available and has statement_id
-            if (hasStatementId) {
-                const dataFrame = response.data_frames.find(df => df.statement_id === query.statement_id);
-                if (dataFrame) {
-                    showQueryData(dataFrame, query.statement_id);
-                }
+            // Show data if available (either from statement_id or direct execution)
+            const dataFrame = response.data_frames.find(df => 
+                df.statement_id === query.statement_id || 
+                (query.statement_id === 'direct_execution' && df.statement_id === 'direct_execution')
+            );
+            if (dataFrame) {
+                showQueryData(dataFrame, query.statement_id || 'direct_execution');
             }
         });
     }

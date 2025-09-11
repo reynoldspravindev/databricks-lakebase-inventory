@@ -50,6 +50,70 @@ class GenieService:
             print(f"Error retrieving query result: {e}")
             return None
     
+    def execute_sql_directly(self, sql_query: str) -> Optional[pd.DataFrame]:
+        """
+        Execute SQL query directly against the PostgreSQL database.
+        This is used when Genie doesn't provide a statement_id.
+        """
+        try:
+            # Import database connection components
+            import psycopg
+            from psycopg import sql
+            import os
+            import time
+            
+            # Get database connection details
+            postgres_password = None
+            last_password_refresh = 0
+            
+            def refresh_oauth_token():
+                nonlocal postgres_password, last_password_refresh
+                if postgres_password is None or time.time() - last_password_refresh > 900:
+                    print("Refreshing PostgreSQL OAuth token for direct SQL execution")
+                    try:
+                        # Use the same method as in the main app
+                        postgres_password = self.workspace_client.config.oauth_token().access_token
+                        last_password_refresh = time.time()
+                    except Exception as e:
+                        print(f"❌ Failed to refresh OAuth token: {str(e)}")
+                        return False
+                return True
+            
+            # Refresh token and get connection
+            if not refresh_oauth_token():
+                return None
+                
+            conn_string = (
+                f"dbname={os.getenv('PGDATABASE')} "
+                f"user={os.getenv('PGUSER')} "
+                f"password={postgres_password} "
+                f"host={os.getenv('PGHOST')} "
+                f"port={os.getenv('PGPORT')} "
+                f"sslmode={os.getenv('PGSSLMODE', 'require')} "
+                f"application_name={os.getenv('PGAPPNAME', 'genie_direct_execution')}"
+            )
+            
+            with psycopg.connect(conn_string) as conn:
+                with conn.cursor() as cur:
+                    # Execute the SQL query
+                    cur.execute(sql_query)
+                    
+                    # Get column names
+                    columns = [desc[0] for desc in cur.description] if cur.description else []
+                    
+                    # Fetch all results
+                    rows = cur.fetchall()
+                    
+                    if not rows:
+                        return None
+                    
+                    # Convert to DataFrame
+                    return pd.DataFrame(rows, columns=columns)
+                    
+        except Exception as e:
+            print(f"Error executing SQL directly: {e}")
+            return None
+    
     def process_genie_response(self, response) -> Dict[str, Any]:
         """
         Process Genie response and extract text, queries, and data.
@@ -98,7 +162,7 @@ class GenieService:
                                 print(f"Found alternative statement_id as '{attr_name}': {statement_id}")
                                 break
                     
-                    if statement_id:
+                    if statement_id and statement_id != 'None':
                         query_info['statement_id'] = statement_id
                         print(f"Executing query with statement_id: {statement_id}")
                         
@@ -119,7 +183,23 @@ class GenieService:
                         except Exception as e:
                             print(f"Error executing query: {e}")
                     else:
-                        print(f"No statement_id available for query execution")
+                        print(f"No valid statement_id available, executing SQL directly against database")
+                        # Execute the generated SQL directly against PostgreSQL
+                        try:
+                            data = self.execute_sql_directly(query_info['generated_sql'])
+                            if data is not None:
+                                print(f"Direct SQL execution successful, got {len(data)} rows")
+                                processed_response['data_frames'].append({
+                                    'data': data.to_dict('records'),
+                                    'columns': data.columns.tolist(),
+                                    'shape': data.shape,
+                                    'statement_id': 'direct_execution'
+                                })
+                                processed_response['generated_code'].append(query_info['generated_sql'])
+                            else:
+                                print(f"Direct SQL execution returned no data")
+                        except Exception as e:
+                            print(f"Error executing SQL directly: {e}")
                     
                     processed_response['queries'].append(query_info)
             
