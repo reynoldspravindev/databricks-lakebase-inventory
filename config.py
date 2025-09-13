@@ -39,7 +39,9 @@ class Config:
             'DASHBOARD_ID': ['databricks', 'dashboard_id'],
             'SECRET_KEY': ['app', 'secret_key'],
             'PORT': ['app', 'port'],
-            'DEBUG': ['app', 'debug']
+            'DEBUG': ['app', 'debug'],
+            'POSTGRES_CATEGORY_TABLE': ['database', 'category_table'],
+            'POSTGRES_WAREHOUSE_TABLE': ['database', 'warehouse_table']
         }
         
         for env_var, config_path in env_mappings.items():

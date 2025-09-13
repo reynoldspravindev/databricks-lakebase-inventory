@@ -23,21 +23,20 @@
 
                         <!-- Category -->
                         <div class="col-md-6 mb-3">
-                            <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="category" name="category" required 
-                                   value="{{ item[3] }}" placeholder="e.g., Electronics, Tools, Furniture" list="categoryList">
-                            <datalist id="categoryList">
-                                <option value="Electronics">
-                                <option value="Tools">
-                                <option value="Furniture">
-                                <option value="Vehicles">
-                                <option value="Safety Equipment">
-                                <option value="IT Equipment">
-                                <option value="Office Supplies">
-                                <option value="Medical Equipment">
-                                <option value="Lab Equipment">
-                                <option value="Construction">
-                            </datalist>
+                            <label for="category_id" class="form-label">Category <span class="text-danger">*</span></label>
+                            <select class="form-select" id="category_id" name="category_id" required>
+                                <option value="">Select a category...</option>
+                                {% for category in categories %}
+                                    <option value="{{ category[0] }}" {% if category[0] == item[12] %}selected{% endif %}>
+                                        {{ category[1] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <a href="{{ url_for('categories_route') }}" target="_blank">
+                                    <i class="fas fa-plus"></i> Manage Categories
+                                </a>
+                            </div>
                         </div>
                     </div>
 
@@ -77,14 +76,35 @@
                         <div class="col-md-6 mb-3">
                             <label for="supplier" class="form-label">Supplier</label>
                             <input type="text" class="form-control" id="supplier" name="supplier" 
-                                   value="{{ item[6] or '' }}" placeholder="Enter supplier name">
+                                   value="{{ item[7] or '' }}" placeholder="Enter supplier name">
                         </div>
 
-                        <!-- Location -->
+                        <!-- Warehouse -->
                         <div class="col-md-6 mb-3">
-                            <label for="location" class="form-label">Location</label>
+                            <label for="warehouse_id" class="form-label">Warehouse</label>
+                            <select class="form-select" id="warehouse_id" name="warehouse_id">
+                                <option value="">Select a warehouse...</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse[0] }}" {% if warehouse[0] == item[13] %}selected{% endif %}>
+                                        {{ warehouse[1] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <a href="{{ url_for('warehouses_route') }}" target="_blank">
+                                    <i class="fas fa-plus"></i> Manage Warehouses
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- Location -->
+                        <div class="col-md-12 mb-3">
+                            <label for="location" class="form-label">Specific Location</label>
                             <input type="text" class="form-control" id="location" name="location" 
-                                   value="{{ item[7] or '' }}" placeholder="e.g., Warehouse A, Room 101, Building B">
+                                   value="{{ item[8] or '' }}" placeholder="e.g., Room 101, Building B, Shelf A1">
+                            <div class="form-text">Specific location within the warehouse (optional)</div>
                         </div>
                     </div>
 

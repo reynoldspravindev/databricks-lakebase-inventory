@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Warehouses - Inventory{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-warehouse"></i> Warehouses</h2>
+    <a href="{{ url_for('add_warehouse_route') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Add Warehouse
+    </a>
+</div>
+
+{% if warehouses %}
+    <div class="row">
+        {% for warehouse in warehouses %}
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-warehouse text-primary"></i> {{ warehouse[1] }}
+                    </h5>
+                    
+                    {% if warehouse[2] or warehouse[3] or warehouse[4] %}
+                        <p class="card-text">
+                            {% if warehouse[2] %}{{ warehouse[2] }}<br>{% endif %}
+                            {% if warehouse[3] or warehouse[4] or warehouse[5] %}
+                                {{ warehouse[3] or '' }}{% if warehouse[3] and warehouse[4] %}, {% endif %}{{ warehouse[4] or '' }}{% if warehouse[4] and warehouse[5] %}, {% endif %}{{ warehouse[5] or '' }}
+                            {% endif %}
+                        </p>
+                    {% endif %}
+                    
+                    {% if warehouse[6] or warehouse[7] %}
+                        <p class="card-text">
+                            <small class="text-muted">
+                                {% if warehouse[6] %}{{ warehouse[6] }}{% endif %}
+                                {% if warehouse[6] and warehouse[7] %} - {% endif %}
+                                {% if warehouse[7] %}{{ warehouse[7] }}{% endif %}
+                            </small>
+                        </p>
+                    {% endif %}
+                    
+                    {% if warehouse[8] and warehouse[9] %}
+                        <p class="card-text">
+                            <small class="text-muted">
+                                <i class="fas fa-map-marker-alt"></i> 
+                                {{ "%.4f"|format(warehouse[8]) }}, {{ "%.4f"|format(warehouse[9]) }}
+                            </small>
+                        </p>
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-calendar"></i> 
+                            Created: {{ warehouse[13].strftime('%B %d, %Y') if warehouse[13] else 'Unknown' }}
+                        </small>
+                        <div class="btn-group btn-group-sm">
+                            <a href="{{ url_for('edit_warehouse_route', warehouse_id=warehouse[0]) }}" 
+                               class="btn btn-outline-primary">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ url_for('delete_warehouse_route', warehouse_id=warehouse[0]) }}" 
+                               class="btn btn-outline-danger"
+                               onclick="return confirm('Are you sure you want to delete this warehouse? This action cannot be undone.')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-warehouse fa-3x text-muted mb-3"></i>
+        <h4 class="text-muted">No Warehouses Found</h4>
+        <p class="text-muted">Get started by adding your first warehouse.</p>
+        <a href="{{ url_for('add_warehouse_route') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add Warehouse
+        </a>
+    </div>
+{% endif %}
+{% endblock %}

@@ -53,6 +53,7 @@
                                 <tr>
                                     <th>Item Name</th>
                                     <th>Category</th>
+                                    <th>Warehouse</th>
                                     <th>Quantity</th>
                                     <th>Unit Price</th>
                                     <th>Total Value</th>
@@ -66,8 +67,8 @@
                             </thead>
                             <tbody>
                                 {% for item in items %}
-                                    {% set is_low_stock = item[8] and item[4] <= item[8] %}
-                                    {% set is_out_of_stock = item[4] == 0 %}
+                                    {% set is_low_stock = item[9] and item[5] <= item[9] %}
+                                    {% set is_out_of_stock = item[5] == 0 %}
                                     <tr class="{% if is_out_of_stock %}out-of-stock{% elif is_low_stock %}low-stock{% endif %}" 
                                         data-category="{{ item[3] }}" 
                                         data-stock-status="{% if is_out_of_stock %}out{% elif is_low_stock %}low{% else %}normal{% endif %}">
@@ -77,19 +78,20 @@
                                                 <br><small class="text-muted">{{ item[2][:50] }}{% if item[2]|length > 50 %}...{% endif %}</small>
                                             {% endif %}
                                         </td>
-                                        <td>{{ item[3] }}</td>
+                                        <td>{{ item[3] or '-' }}</td>
+                                        <td>{{ item[4] or '-' }}</td>
                                         <td>
                                             <span class="badge {% if is_out_of_stock %}bg-danger{% elif is_low_stock %}bg-warning{% else %}bg-success{% endif %}">
-                                                {{ item[4] }}
+                                                {{ item[5] }}
                                             </span>
-                                            {% if item[8] %}
-                                                <br><small class="text-muted">Min: {{ item[8] }}</small>
+                                            {% if item[9] %}
+                                                <br><small class="text-muted">Min: {{ item[9] }}</small>
                                             {% endif %}
                                         </td>
-                                        <td>${{ "%.2f"|format(item[5]) }}</td>
-                                        <td><strong>${{ "%.2f"|format(item[4] * item[5]) }}</strong></td>
-                                        <td>{{ item[6] or '-' }}</td>
+                                        <td>${{ "%.2f"|format(item[6]) }}</td>
+                                        <td><strong>${{ "%.2f"|format(item[5] * item[6]) }}</strong></td>
                                         <td>{{ item[7] or '-' }}</td>
+                                        <td>{{ item[8] or '-' }}</td>
                                         <td>
                                             {% if is_out_of_stock %}
                                                 <span class="badge bg-danger">Out of Stock</span>
@@ -102,10 +104,10 @@
                                         <td class="timestamp-cell">
                                             <small class="text-muted" 
                                                    data-bs-toggle="tooltip" 
-                                                   title="{% if item[9] %}Added on {{ item[9].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Date unknown{% endif %}">
-                                                {% if item[9] %}
-                                                    {{ item[9].strftime('%m/%d/%Y') }}<br>
-                                                    <span class="text-muted">{{ item[9].strftime('%H:%M') }}</span>
+                                                   title="{% if item[10] %}Added on {{ item[10].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Date unknown{% endif %}">
+                                                {% if item[10] %}
+                                                    {{ item[10].strftime('%m/%d/%Y') }}<br>
+                                                    <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
                                                 {% else %}
                                                     <span class="text-muted">Unknown</span>
                                                 {% endif %}
@@ -114,14 +116,14 @@
                                         <td class="timestamp-cell">
                                             <small class="text-muted"
                                                    data-bs-toggle="tooltip" 
-                                                   title="{% if item[10] %}Last modified on {{ item[10].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Never modified{% endif %}">
-                                                {% if item[10] %}
-                                                    {% if item[9] and item[10].date() == item[9].date() %}
+                                                   title="{% if item[11] %}Last modified on {{ item[11].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Never modified{% endif %}">
+                                                {% if item[11] %}
+                                                    {% if item[10] and item[11].date() == item[10].date() %}
                                                         <span class="text-success">Same Day</span><br>
-                                                        <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
+                                                        <span class="text-muted">{{ item[11].strftime('%H:%M') }}</span>
                                                     {% else %}
-                                                        {{ item[10].strftime('%m/%d/%Y') }}<br>
-                                                        <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
+                                                        {{ item[11].strftime('%m/%d/%Y') }}<br>
+                                                        <span class="text-muted">{{ item[11].strftime('%H:%M') }}</span>
                                                     {% endif %}
                                                 {% else %}
                                                     <span class="text-muted">Never</span>
@@ -162,7 +164,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Total Value</h5>
-                                    <h3 class="text-success">${{ "%.2f"|format(items|sum(attribute=4) * items|sum(attribute=5) if items else 0) }}</h3>
+                                    <h3 class="text-success">${{ "%.2f"|format(items|sum(attribute=5) * items|sum(attribute=6) if items else 0) }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -195,10 +197,10 @@
                                                 <small class="text-muted">
                                                     <i class="fas fa-plus-circle text-success"></i> 
                                                     <strong>Newest Item:</strong><br>
-                                                    {% set newest_item = items|max(attribute=9) if items else None %}
+                                                    {% set newest_item = items|max(attribute=10) if items else None %}
                                                     {% if newest_item %}
                                                         {{ newest_item[1] }}<br>
-                                                        <span class="text-muted">{{ newest_item[9].strftime('%Y-%m-%d %H:%M') }}</span>
+                                                        <span class="text-muted">{{ newest_item[10].strftime('%Y-%m-%d %H:%M') }}</span>
                                                     {% else %}
                                                         No items found
                                                     {% endif %}
@@ -208,10 +210,10 @@
                                                 <small class="text-muted">
                                                     <i class="fas fa-edit text-primary"></i> 
                                                     <strong>Last Updated:</strong><br>
-                                                    {% set last_updated_item = items|max(attribute=10) if items else None %}
+                                                    {% set last_updated_item = items|max(attribute=11) if items else None %}
                                                     {% if last_updated_item %}
                                                         {{ last_updated_item[1] }}<br>
-                                                        <span class="text-muted">{{ last_updated_item[10].strftime('%Y-%m-%d %H:%M') }}</span>
+                                                        <span class="text-muted">{{ last_updated_item[11].strftime('%Y-%m-%d %H:%M') }}</span>
                                                     {% else %}
                                                         No updates yet
                                                     {% endif %}

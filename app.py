@@ -74,64 +74,462 @@ def get_connection():
 def get_schema_name():
     return os.getenv("POSTGRES_SCHEMA", "inventory_app")
 
+def get_category_table_name():
+    return os.getenv("POSTGRES_CATEGORY_TABLE", "inventory_category")
+
+def get_warehouse_table_name():
+    return os.getenv("POSTGRES_WAREHOUSE_TABLE", "inventory_warehouse")
+
 def init_database():
-    """Initialize database schema and table."""
+    """Initialize database schema and tables."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema_name = get_schema_name()
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                category_table_name = get_category_table_name()
+                warehouse_table_name = get_warehouse_table_name()
                 
                 print(f"🔧 Creating schema '{schema_name}' if it doesn't exist...")
                 cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
                 print(f"✅ Schema '{schema_name}' ready")
                 
-                print(f"🔧 Creating table '{schema_name}.{table_name}' if it doesn't exist...")
-                
-                # Fixed CREATE TABLE statement
-                create_table_sql = sql.SQL("""
+                # Create category table first
+                print(f"🔧 Creating table '{schema_name}.{category_table_name}' if it doesn't exist...")
+                create_category_table_sql = sql.SQL("""
                     CREATE TABLE IF NOT EXISTS {}.{} (
-                        id serial4 NOT NULL,
-                        item_name varchar(100) NOT NULL,
+                        category_id serial4 NOT NULL,
+                        category_name varchar(50) NOT NULL UNIQUE,
                         description text NULL,
-                        category varchar(50) NOT NULL,
-                        quantity int4 NOT NULL,
-                        unit_price float8 NOT NULL,
-                        supplier varchar(100) NULL,
-                        "location" varchar(100) NULL,
-                        minimum_stock int4 NULL,
-                        date_added timestamp DEFAULT CURRENT_TIMESTAMP,
+                        date_created timestamp DEFAULT CURRENT_TIMESTAMP,
                         last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (id)
+                        PRIMARY KEY (category_id)
                     );
                 """).format(
                     sql.Identifier(schema_name), 
-                    sql.Identifier(table_name)
+                    sql.Identifier(category_table_name)
                 )
+                cur.execute(create_category_table_sql)
+                print(f"✅ Table '{schema_name}.{category_table_name}' ready")
                 
-                cur.execute(create_table_sql)
-                print(f"✅ Table '{schema_name}.{table_name}' ready")
+                # Create warehouse table
+                print(f"🔧 Creating table '{schema_name}.{warehouse_table_name}' if it doesn't exist...")
+                create_warehouse_table_sql = sql.SQL("""
+                    CREATE TABLE IF NOT EXISTS {}.{} (
+                        warehouse_id serial4 NOT NULL,
+                        warehouse_name varchar(100) NOT NULL,
+                        address varchar(255) NULL,
+                        city varchar(100) NULL,
+                        state varchar(100) NULL,
+                        country varchar(100) NULL,
+                        county varchar(100) NULL,
+                        zipcode varchar(20) NULL,
+                        latitude decimal(10, 8) NULL,
+                        longitude decimal(11, 8) NULL,
+                        contact_person varchar(100) NULL,
+                        phone varchar(20) NULL,
+                        email varchar(100) NULL,
+                        date_created timestamp DEFAULT CURRENT_TIMESTAMP,
+                        last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (warehouse_id)
+                    );
+                """).format(
+                    sql.Identifier(schema_name), 
+                    sql.Identifier(warehouse_table_name)
+                )
+                cur.execute(create_warehouse_table_sql)
+                print(f"✅ Table '{schema_name}.{warehouse_table_name}' ready")
+                
+                # Check if old inventory_items table exists and migrate data
+                print("🔧 Checking for existing inventory_items table...")
+                cur.execute(sql.SQL("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = %s AND table_name = %s
+                    );
+                """), (schema_name, table_name))
+                
+                table_exists = cur.fetchone()[0]
+                
+                if table_exists:
+                    # Check if table has old schema (with category column instead of category_id)
+                    cur.execute(sql.SQL("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_schema = %s AND table_name = %s AND column_name = 'category'
+                    """), (schema_name, table_name))
+                    
+                    has_old_schema = cur.fetchone() is not None
+                    
+                    if has_old_schema:
+                        print("🔧 Migrating existing data to new schema...")
+                        migrate_existing_data(conn, cur, schema_name, table_name, category_table_name, warehouse_table_name)
+                    else:
+                        print("✅ Table already has new schema")
+                else:
+                    # Create new inventory_items table with foreign keys
+                    print(f"🔧 Creating new table '{schema_name}.{table_name}'...")
+                    create_table_sql = sql.SQL("""
+                        CREATE TABLE {}.{} (
+                            id serial4 NOT NULL,
+                            item_name varchar(100) NOT NULL,
+                            description text NULL,
+                            category_id int4 NOT NULL,
+                            warehouse_id int4 NULL,
+                            quantity int4 NOT NULL,
+                            unit_price float8 NOT NULL,
+                            supplier varchar(100) NULL,
+                            "location" varchar(100) NULL,
+                            minimum_stock int4 NULL,
+                            date_added timestamp DEFAULT CURRENT_TIMESTAMP,
+                            last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+                            PRIMARY KEY (id),
+                            FOREIGN KEY (category_id) REFERENCES {}.{}(category_id) ON DELETE RESTRICT,
+                            FOREIGN KEY (warehouse_id) REFERENCES {}.{}(warehouse_id) ON DELETE SET NULL
+                        );
+                    """).format(
+                        sql.Identifier(schema_name), 
+                        sql.Identifier(table_name),
+                        sql.Identifier(schema_name),
+                        sql.Identifier(category_table_name),
+                        sql.Identifier(schema_name),
+                        sql.Identifier(warehouse_table_name)
+                    )
+                    
+                    cur.execute(create_table_sql)
+                    print(f"✅ Table '{schema_name}.{table_name}' ready")
+                
+                # Insert default categories if they don't exist
+                print("🔧 Inserting default categories...")
+                default_categories = [
+                    "Electronics", "Tools", "Furniture", "Vehicles", "Safety Equipment",
+                    "IT Equipment", "Office Supplies", "Medical Equipment", "Lab Equipment", "Construction"
+                ]
+                
+                for category in default_categories:
+                    cur.execute(sql.SQL("""
+                        INSERT INTO {}.{} (category_name) 
+                        VALUES (%s) 
+                        ON CONFLICT (category_name) DO NOTHING
+                    """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)), (category,))
+                
+                print("✅ Default categories inserted")
+                
+                # Insert default warehouse if none exists
+                print("🔧 Inserting default warehouse...")
+                cur.execute(sql.SQL("""
+                    INSERT INTO {}.{} (warehouse_name, city, state, country) 
+                    SELECT 'Main Warehouse', 'Unknown', 'Unknown', 'Unknown'
+                    WHERE NOT EXISTS (SELECT 1 FROM {}.{})
+                """).format(
+                    sql.Identifier(schema_name), 
+                    sql.Identifier(warehouse_table_name),
+                    sql.Identifier(schema_name),
+                    sql.Identifier(warehouse_table_name)
+                ))
+                
+                print("✅ Default warehouse inserted")
                 
                 conn.commit()
-                print("✅ Schema and table creation committed")
+                print("✅ Schema and tables creation committed")
                 return True
                 
     except Exception as e:
         print(f"❌ Database initialization error: {e}")
         return False
 
-def add_inventory_item(item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
+def migrate_existing_data(conn, cur, schema_name, table_name, category_table_name, warehouse_table_name):
+    """Migrate existing inventory_items data to new schema."""
+    try:
+        # Get all unique categories from existing data
+        cur.execute(sql.SQL("""
+            SELECT DISTINCT category FROM {}.{} WHERE category IS NOT NULL
+        """).format(sql.Identifier(schema_name), sql.Identifier(table_name)))
+        
+        existing_categories = [row[0] for row in cur.fetchall()]
+        
+        # Insert categories that don't exist
+        for category in existing_categories:
+            cur.execute(sql.SQL("""
+                INSERT INTO {}.{} (category_name) 
+                VALUES (%s) 
+                ON CONFLICT (category_name) DO NOTHING
+            """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)), (category,))
+        
+        # Get category mappings
+        cur.execute(sql.SQL("""
+            SELECT category_id, category_name FROM {}.{}
+        """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)))
+        
+        category_mapping = {name: cat_id for cat_id, name in cur.fetchall()}
+        
+        # Get default warehouse ID
+        cur.execute(sql.SQL("""
+            SELECT warehouse_id FROM {}.{} WHERE warehouse_name = 'Main Warehouse' LIMIT 1
+        """).format(sql.Identifier(schema_name), sql.Identifier(warehouse_table_name)))
+        
+        default_warehouse_id = cur.fetchone()
+        default_warehouse_id = default_warehouse_id[0] if default_warehouse_id else None
+        
+        # Create new table with migrated data
+        cur.execute(sql.SQL("""
+            CREATE TABLE {}.{}_new (
+                id serial4 NOT NULL,
+                item_name varchar(100) NOT NULL,
+                description text NULL,
+                category_id int4 NOT NULL,
+                warehouse_id int4 NULL,
+                quantity int4 NOT NULL,
+                unit_price float8 NOT NULL,
+                supplier varchar(100) NULL,
+                "location" varchar(100) NULL,
+                minimum_stock int4 NULL,
+                date_added timestamp DEFAULT CURRENT_TIMESTAMP,
+                last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                FOREIGN KEY (category_id) REFERENCES {}.{}(category_id) ON DELETE RESTRICT,
+                FOREIGN KEY (warehouse_id) REFERENCES {}.{}(warehouse_id) ON DELETE SET NULL
+            );
+        """).format(
+            sql.Identifier(schema_name), 
+            sql.Identifier(table_name),
+            sql.Identifier(schema_name),
+            sql.Identifier(category_table_name),
+            sql.Identifier(schema_name),
+            sql.Identifier(warehouse_table_name)
+        ))
+        
+        # Migrate data with proper category mapping
+        cur.execute(sql.SQL("""
+            INSERT INTO {}.{}_new 
+            (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated)
+            SELECT 
+                i.item_name, 
+                i.description, 
+                COALESCE(c.category_id, 1), 
+                %s, 
+                i.quantity, 
+                i.unit_price, 
+                i.supplier, 
+                i.location, 
+                i.minimum_stock, 
+                i.date_added, 
+                i.last_updated
+            FROM {}.{} i
+            LEFT JOIN {}.{} c ON i.category = c.category_name
+        """).format(
+            sql.Identifier(schema_name), 
+            sql.Identifier(table_name),
+            sql.Identifier(schema_name), 
+            sql.Identifier(table_name),
+            sql.Identifier(schema_name),
+            sql.Identifier(category_table_name)
+        ), (default_warehouse_id,))
+        
+        # Drop old table and rename new one
+        cur.execute(sql.SQL("DROP TABLE {}.{}").format(sql.Identifier(schema_name), sql.Identifier(table_name)))
+        cur.execute(sql.SQL("ALTER TABLE {}.{}_new RENAME TO {}").format(
+            sql.Identifier(schema_name), 
+            sql.Identifier(table_name),
+            sql.Identifier(table_name)
+        ))
+        
+        print("✅ Data migration completed")
+        
+    except Exception as e:
+        print(f"❌ Data migration error: {e}")
+        raise
+
+# Category management functions
+def get_categories():
+    """Get all categories."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                category_table = get_category_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT category_id, category_name, description, date_created, last_updated 
+                    FROM {}.{} ORDER BY category_name ASC
+                """).format(sql.Identifier(schema), sql.Identifier(category_table)))
+                return cur.fetchall()
+    except Exception as e:
+        print(f"Get categories error: {e}")
+        return []
+
+def get_category(category_id):
+    """Get a specific category by ID."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                category_table = get_category_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT category_id, category_name, description, date_created, last_updated 
+                    FROM {}.{} WHERE category_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(category_table)), (category_id,))
+                return cur.fetchone()
+    except Exception as e:
+        print(f"Get category error: {e}")
+        return None
+
+def add_category(category_name, description=None):
+    """Add a new category."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                category_table = get_category_table_name()
+                cur.execute(sql.SQL("""
+                    INSERT INTO {}.{} (category_name, description, date_created, last_updated) 
+                    VALUES (%s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(category_table)), 
+                (category_name, description, datetime.now(), datetime.now()))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Add category error: {e}")
+        return False
+
+def update_category(category_id, category_name, description=None):
+    """Update an existing category."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                category_table = get_category_table_name()
+                cur.execute(sql.SQL("""
+                    UPDATE {}.{} 
+                    SET category_name = %s, description = %s, last_updated = %s
+                    WHERE category_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(category_table)), 
+                (category_name, description, datetime.now(), category_id))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Update category error: {e}")
+        return False
+
+def delete_category(category_id):
+    """Delete a category."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                category_table = get_category_table_name()
+                cur.execute(sql.SQL("DELETE FROM {}.{} WHERE category_id = %s").format(sql.Identifier(schema), sql.Identifier(category_table)), (category_id,))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Delete category error: {e}")
+        return False
+
+# Warehouse management functions
+def get_warehouses():
+    """Get all warehouses."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                warehouse_table = get_warehouse_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT warehouse_id, warehouse_name, address, city, state, country, county, zipcode, 
+                           latitude, longitude, contact_person, phone, email, date_created, last_updated 
+                    FROM {}.{} ORDER BY warehouse_name ASC
+                """).format(sql.Identifier(schema), sql.Identifier(warehouse_table)))
+                return cur.fetchall()
+    except Exception as e:
+        print(f"Get warehouses error: {e}")
+        return []
+
+def get_warehouse(warehouse_id):
+    """Get a specific warehouse by ID."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                warehouse_table = get_warehouse_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT warehouse_id, warehouse_name, address, city, state, country, county, zipcode, 
+                           latitude, longitude, contact_person, phone, email, date_created, last_updated 
+                    FROM {}.{} WHERE warehouse_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(warehouse_table)), (warehouse_id,))
+                return cur.fetchone()
+    except Exception as e:
+        print(f"Get warehouse error: {e}")
+        return None
+
+def add_warehouse(warehouse_name, address=None, city=None, state=None, country=None, county=None, 
+                 zipcode=None, latitude=None, longitude=None, contact_person=None, phone=None, email=None):
+    """Add a new warehouse."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                warehouse_table = get_warehouse_table_name()
+                cur.execute(sql.SQL("""
+                    INSERT INTO {}.{} (warehouse_name, address, city, state, country, county, zipcode, 
+                                     latitude, longitude, contact_person, phone, email, date_created, last_updated) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(warehouse_table)), 
+                (warehouse_name, address, city, state, country, county, zipcode, 
+                 latitude, longitude, contact_person, phone, email, datetime.now(), datetime.now()))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Add warehouse error: {e}")
+        return False
+
+def update_warehouse(warehouse_id, warehouse_name, address=None, city=None, state=None, country=None, county=None, 
+                    zipcode=None, latitude=None, longitude=None, contact_person=None, phone=None, email=None):
+    """Update an existing warehouse."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                warehouse_table = get_warehouse_table_name()
+                cur.execute(sql.SQL("""
+                    UPDATE {}.{} 
+                    SET warehouse_name = %s, address = %s, city = %s, state = %s, country = %s, county = %s, 
+                        zipcode = %s, latitude = %s, longitude = %s, contact_person = %s, phone = %s, 
+                        email = %s, last_updated = %s
+                    WHERE warehouse_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(warehouse_table)), 
+                (warehouse_name, address, city, state, country, county, zipcode, 
+                 latitude, longitude, contact_person, phone, email, datetime.now(), warehouse_id))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Update warehouse error: {e}")
+        return False
+
+def delete_warehouse(warehouse_id):
+    """Delete a warehouse."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                warehouse_table = get_warehouse_table_name()
+                cur.execute(sql.SQL("DELETE FROM {}.{} WHERE warehouse_id = %s").format(sql.Identifier(schema), sql.Identifier(warehouse_table)), (warehouse_id,))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Delete warehouse error: {e}")
+        return False
+
+def add_inventory_item(item_name, description, category_id, quantity, unit_price, supplier=None, location=None, minimum_stock=None, warehouse_id=None):
     """Add a new inventory item."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 cur.execute(sql.SQL("""
-                    INSERT INTO {}.inventory_items 
-                    (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """).format(sql.Identifier(schema)), 
-                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()))
+                    INSERT INTO {}.{} 
+                    (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)), 
+                (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()))
                 conn.commit()
                 return True
     except Exception as e:
@@ -144,13 +542,14 @@ def add_inventory_items_bulk(items_data):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 
                 # Prepare the bulk insert
                 insert_query = sql.SQL("""
-                    INSERT INTO {}.inventory_items 
-                    (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """).format(sql.Identifier(schema))
+                    INSERT INTO {}.{} 
+                    (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(table_name))
                 
                 # Execute bulk insert
                 cur.executemany(insert_query, items_data)
@@ -166,7 +565,7 @@ def validate_csv_row(row, row_num):
     
     # Required fields
     item_name = row.get('item_name', '').strip()
-    category = row.get('category', '').strip()
+    category_name = row.get('category', '').strip()
     
     # Validate required fields
     if not item_name:
@@ -174,10 +573,21 @@ def validate_csv_row(row, row_num):
     elif len(item_name) > 100:
         errors.append(f"Row {row_num}: item_name must be 100 characters or less")
         
-    if not category:
+    if not category_name:
         errors.append(f"Row {row_num}: category is required")
-    elif len(category) > 50:
+    elif len(category_name) > 50:
         errors.append(f"Row {row_num}: category must be 50 characters or less")
+    
+    # Get category_id from category name
+    category_id = None
+    if category_name:
+        categories = get_categories()
+        for cat in categories:
+            if cat[1].lower() == category_name.lower():  # cat[1] is category_name
+                category_id = cat[0]  # cat[0] is category_id
+                break
+        if not category_id:
+            errors.append(f"Row {row_num}: category '{category_name}' not found. Please add it first.")
     
     # Validate quantity
     try:
@@ -218,10 +628,22 @@ def validate_csv_row(row, row_num):
         except (ValueError, TypeError):
             errors.append(f"Row {row_num}: minimum_stock must be a valid number or empty")
     
+    # Get warehouse_id from warehouse name if provided
+    warehouse_id = None
+    warehouse_name = row.get('warehouse', '').strip()
+    if warehouse_name:
+        warehouses = get_warehouses()
+        for wh in warehouses:
+            if wh[1].lower() == warehouse_name.lower():  # wh[1] is warehouse_name
+                warehouse_id = wh[0]  # wh[0] is warehouse_id
+                break
+        if not warehouse_id:
+            errors.append(f"Row {row_num}: warehouse '{warehouse_name}' not found. Please add it first.")
+    
     if errors:
         return None, errors
     
-    return (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()), []
+    return (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()), []
 
 def process_csv_file(file_content):
     """Process uploaded CSV file and return results."""
@@ -231,7 +653,7 @@ def process_csv_file(file_content):
         
         # Expected columns
         required_columns = {'item_name', 'category', 'quantity', 'unit_price'}
-        optional_columns = {'description', 'supplier', 'location', 'minimum_stock'}
+        optional_columns = {'description', 'supplier', 'location', 'minimum_stock', 'warehouse'}
         all_columns = required_columns.union(optional_columns)
         
         # Check if required columns exist
@@ -291,48 +713,73 @@ def process_csv_file(file_content):
         }
 
 def get_inventory_items():
-    """Get all inventory items."""
+    """Get all inventory items with category and warehouse information."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                category_table = get_category_table_name()
+                warehouse_table = get_warehouse_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                    FROM {}.inventory_items ORDER BY item_name ASC
-                """).format(sql.Identifier(schema)))
+                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, 
+                           i.quantity, i.unit_price, i.supplier, i.location, i.minimum_stock, 
+                           i.date_added, i.last_updated, i.category_id, i.warehouse_id
+                    FROM {}.{} i
+                    LEFT JOIN {}.{} c ON i.category_id = c.category_id
+                    LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
+                    ORDER BY i.item_name ASC
+                """).format(
+                    sql.Identifier(schema), sql.Identifier(table_name),
+                    sql.Identifier(schema), sql.Identifier(category_table),
+                    sql.Identifier(schema), sql.Identifier(warehouse_table)
+                ))
                 return cur.fetchall()
     except Exception as e:
         print(f"Get inventory items error: {e}")
         return []
 
 def get_inventory_item(item_id):
-    """Get a specific inventory item by ID."""
+    """Get a specific inventory item by ID with category and warehouse information."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                category_table = get_category_table_name()
+                warehouse_table = get_warehouse_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                    FROM {}.inventory_items WHERE id = %s
-                """).format(sql.Identifier(schema)), (item_id,))
+                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, 
+                           i.quantity, i.unit_price, i.supplier, i.location, i.minimum_stock, 
+                           i.date_added, i.last_updated, i.category_id, i.warehouse_id
+                    FROM {}.{} i
+                    LEFT JOIN {}.{} c ON i.category_id = c.category_id
+                    LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
+                    WHERE i.id = %s
+                """).format(
+                    sql.Identifier(schema), sql.Identifier(table_name),
+                    sql.Identifier(schema), sql.Identifier(category_table),
+                    sql.Identifier(schema), sql.Identifier(warehouse_table)
+                ), (item_id,))
                 return cur.fetchone()
     except Exception as e:
         print(f"Get inventory item error: {e}")
         return None
 
-def update_inventory_item(item_id, item_name, description, category, quantity, unit_price, supplier=None, location=None, minimum_stock=None):
+def update_inventory_item(item_id, item_name, description, category_id, quantity, unit_price, supplier=None, location=None, minimum_stock=None, warehouse_id=None):
     """Update an existing inventory item."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 cur.execute(sql.SQL("""
-                    UPDATE {}.inventory_items 
-                    SET item_name = %s, description = %s, category = %s, quantity = %s, unit_price = %s, 
+                    UPDATE {}.{} 
+                    SET item_name = %s, description = %s, category_id = %s, warehouse_id = %s, quantity = %s, unit_price = %s, 
                         supplier = %s, location = %s, minimum_stock = %s, last_updated = %s
                     WHERE id = %s
-                """).format(sql.Identifier(schema)), 
-                (item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), item_id))
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)), 
+                (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), item_id))
                 conn.commit()
                 return True
     except Exception as e:
@@ -345,7 +792,8 @@ def delete_inventory_item(item_id):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
-                cur.execute(sql.SQL("DELETE FROM {}.inventory_items WHERE id = %s").format(sql.Identifier(schema)), (item_id,))
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                cur.execute(sql.SQL("DELETE FROM {}.{} WHERE id = %s").format(sql.Identifier(schema), sql.Identifier(table_name)), (item_id,))
                 conn.commit()
                 return True
     except Exception as e:
@@ -358,12 +806,23 @@ def get_low_stock_items():
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                category_table = get_category_table_name()
+                warehouse_table = get_warehouse_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated 
-                    FROM {}.inventory_items 
-                    WHERE minimum_stock IS NOT NULL AND quantity <= minimum_stock
-                    ORDER BY (quantity - minimum_stock) ASC
-                """).format(sql.Identifier(schema)))
+                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, 
+                           i.quantity, i.unit_price, i.supplier, i.location, i.minimum_stock, 
+                           i.date_added, i.last_updated, i.category_id, i.warehouse_id
+                    FROM {}.{} i
+                    LEFT JOIN {}.{} c ON i.category_id = c.category_id
+                    LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
+                    WHERE i.minimum_stock IS NOT NULL AND i.quantity <= i.minimum_stock
+                    ORDER BY (i.quantity - i.minimum_stock) ASC
+                """).format(
+                    sql.Identifier(schema), sql.Identifier(table_name),
+                    sql.Identifier(schema), sql.Identifier(category_table),
+                    sql.Identifier(schema), sql.Identifier(warehouse_table)
+                ))
                 return cur.fetchall()
     except Exception as e:
         print(f"Get low stock items error: {e}")
@@ -425,15 +884,16 @@ def add_item_route():
     if request.method == 'POST':
         item_name = request.form.get('item_name', '').strip()
         description = request.form.get('description', '').strip()
-        category = request.form.get('category', '').strip()
+        category_id = request.form.get('category_id', type=int)
+        warehouse_id = request.form.get('warehouse_id', type=int) or None
         quantity = request.form.get('quantity', type=int)
         unit_price = request.form.get('unit_price', type=float)
         supplier = request.form.get('supplier', '').strip() or None
         location = request.form.get('location', '').strip() or None
         minimum_stock = request.form.get('minimum_stock', type=int) or None
         
-        if item_name and category and quantity is not None and unit_price is not None:
-            if add_inventory_item(item_name, description, category, quantity, unit_price, supplier, location, minimum_stock):
+        if item_name and category_id and quantity is not None and unit_price is not None:
+            if add_inventory_item(item_name, description, category_id, quantity, unit_price, supplier, location, minimum_stock, warehouse_id):
                 flash('Item added successfully!', 'success')
             else:
                 flash('Failed to add item.', 'error')
@@ -441,8 +901,10 @@ def add_item_route():
             flash('Please fill in all required fields.', 'error')
         return redirect(url_for('index'))
     
+    categories = get_categories()
+    warehouses = get_warehouses()
     low_stock_items = get_low_stock_items()
-    return render_template('add_item.html', low_stock_count=len(low_stock_items))
+    return render_template('add_item.html', categories=categories, warehouses=warehouses, low_stock_count=len(low_stock_items))
 
 @app.route('/upload-csv', methods=['GET', 'POST'])
 def upload_csv_route():
@@ -538,15 +1000,16 @@ def edit_item_route(item_id):
     if request.method == 'POST':
         item_name = request.form.get('item_name', '').strip()
         description = request.form.get('description', '').strip()
-        category = request.form.get('category', '').strip()
+        category_id = request.form.get('category_id', type=int)
+        warehouse_id = request.form.get('warehouse_id', type=int) or None
         quantity = request.form.get('quantity', type=int)
         unit_price = request.form.get('unit_price', type=float)
         supplier = request.form.get('supplier', '').strip() or None
         location = request.form.get('location', '').strip() or None
         minimum_stock = request.form.get('minimum_stock', type=int) or None
         
-        if item_name and category and quantity is not None and unit_price is not None:
-            if update_inventory_item(item_id, item_name, description, category, quantity, unit_price, supplier, location, minimum_stock):
+        if item_name and category_id and quantity is not None and unit_price is not None:
+            if update_inventory_item(item_id, item_name, description, category_id, quantity, unit_price, supplier, location, minimum_stock, warehouse_id):
                 flash('Item updated successfully!', 'success')
             else:
                 flash('Failed to update item.', 'error')
@@ -554,8 +1017,10 @@ def edit_item_route(item_id):
             flash('Please fill in all required fields.', 'error')
         return redirect(url_for('index'))
     
+    categories = get_categories()
+    warehouses = get_warehouses()
     low_stock_items = get_low_stock_items()
-    return render_template('edit_item.html', item=item, low_stock_count=len(low_stock_items))
+    return render_template('edit_item.html', item=item, categories=categories, warehouses=warehouses, low_stock_count=len(low_stock_items))
 
 @app.route('/delete/<int:item_id>')
 def delete_item_route(item_id):
@@ -606,14 +1071,17 @@ def api_items():
             'id': item[0],
             'item_name': item[1],
             'description': item[2],
-            'category': item[3],
-            'quantity': item[4],
-            'unit_price': item[5],
-            'supplier': item[6],
-            'location': item[7],
-            'minimum_stock': item[8],
-            'date_added': item[9].isoformat() if item[9] else None,
-            'last_updated': item[10].isoformat() if item[10] else None
+            'category_name': item[3],
+            'warehouse_name': item[4],
+            'quantity': item[5],
+            'unit_price': item[6],
+            'supplier': item[7],
+            'location': item[8],
+            'minimum_stock': item[9],
+            'date_added': item[10].isoformat() if item[10] else None,
+            'last_updated': item[11].isoformat() if item[11] else None,
+            'category_id': item[12],
+            'warehouse_id': item[13]
         })
     return jsonify(items_list)
 
@@ -636,6 +1104,148 @@ def api_dashboard_config():
         'public_url': get_dashboard_public_url(),
         'configured': get_dashboard_embed_url() is not None
     })
+
+# Category management routes
+@app.route('/categories')
+def categories_route():
+    """Show all categories."""
+    categories = get_categories()
+    low_stock_items = get_low_stock_items()
+    return render_template('categories.html', categories=categories, low_stock_count=len(low_stock_items))
+
+@app.route('/categories/add', methods=['GET', 'POST'])
+def add_category_route():
+    """Add a new category."""
+    if request.method == 'POST':
+        category_name = request.form.get('category_name', '').strip()
+        description = request.form.get('description', '').strip() or None
+        
+        if category_name:
+            if add_category(category_name, description):
+                flash('Category added successfully!', 'success')
+            else:
+                flash('Failed to add category.', 'error')
+        else:
+            flash('Please fill in the category name.', 'error')
+        return redirect(url_for('categories_route'))
+    
+    low_stock_items = get_low_stock_items()
+    return render_template('add_category.html', low_stock_count=len(low_stock_items))
+
+@app.route('/categories/edit/<int:category_id>', methods=['GET', 'POST'])
+def edit_category_route(category_id):
+    """Edit an existing category."""
+    category = get_category(category_id)
+    if not category:
+        flash('Category not found.', 'error')
+        return redirect(url_for('categories_route'))
+    
+    if request.method == 'POST':
+        category_name = request.form.get('category_name', '').strip()
+        description = request.form.get('description', '').strip() or None
+        
+        if category_name:
+            if update_category(category_id, category_name, description):
+                flash('Category updated successfully!', 'success')
+            else:
+                flash('Failed to update category.', 'error')
+        else:
+            flash('Please fill in the category name.', 'error')
+        return redirect(url_for('categories_route'))
+    
+    low_stock_items = get_low_stock_items()
+    return render_template('edit_category.html', category=category, low_stock_count=len(low_stock_items))
+
+@app.route('/categories/delete/<int:category_id>')
+def delete_category_route(category_id):
+    """Delete a category."""
+    if delete_category(category_id):
+        flash('Category deleted successfully!', 'success')
+    else:
+        flash('Failed to delete category. Make sure no items are using this category.', 'error')
+    return redirect(url_for('categories_route'))
+
+# Warehouse management routes
+@app.route('/warehouses')
+def warehouses_route():
+    """Show all warehouses."""
+    warehouses = get_warehouses()
+    low_stock_items = get_low_stock_items()
+    return render_template('warehouses.html', warehouses=warehouses, low_stock_count=len(low_stock_items))
+
+@app.route('/warehouses/add', methods=['GET', 'POST'])
+def add_warehouse_route():
+    """Add a new warehouse."""
+    if request.method == 'POST':
+        warehouse_name = request.form.get('warehouse_name', '').strip()
+        address = request.form.get('address', '').strip() or None
+        city = request.form.get('city', '').strip() or None
+        state = request.form.get('state', '').strip() or None
+        country = request.form.get('country', '').strip() or None
+        county = request.form.get('county', '').strip() or None
+        zipcode = request.form.get('zipcode', '').strip() or None
+        latitude = request.form.get('latitude', type=float) or None
+        longitude = request.form.get('longitude', type=float) or None
+        contact_person = request.form.get('contact_person', '').strip() or None
+        phone = request.form.get('phone', '').strip() or None
+        email = request.form.get('email', '').strip() or None
+        
+        if warehouse_name:
+            if add_warehouse(warehouse_name, address, city, state, country, county, zipcode, 
+                           latitude, longitude, contact_person, phone, email):
+                flash('Warehouse added successfully!', 'success')
+            else:
+                flash('Failed to add warehouse.', 'error')
+        else:
+            flash('Please fill in the warehouse name.', 'error')
+        return redirect(url_for('warehouses_route'))
+    
+    low_stock_items = get_low_stock_items()
+    return render_template('add_warehouse.html', low_stock_count=len(low_stock_items))
+
+@app.route('/warehouses/edit/<int:warehouse_id>', methods=['GET', 'POST'])
+def edit_warehouse_route(warehouse_id):
+    """Edit an existing warehouse."""
+    warehouse = get_warehouse(warehouse_id)
+    if not warehouse:
+        flash('Warehouse not found.', 'error')
+        return redirect(url_for('warehouses_route'))
+    
+    if request.method == 'POST':
+        warehouse_name = request.form.get('warehouse_name', '').strip()
+        address = request.form.get('address', '').strip() or None
+        city = request.form.get('city', '').strip() or None
+        state = request.form.get('state', '').strip() or None
+        country = request.form.get('country', '').strip() or None
+        county = request.form.get('county', '').strip() or None
+        zipcode = request.form.get('zipcode', '').strip() or None
+        latitude = request.form.get('latitude', type=float) or None
+        longitude = request.form.get('longitude', type=float) or None
+        contact_person = request.form.get('contact_person', '').strip() or None
+        phone = request.form.get('phone', '').strip() or None
+        email = request.form.get('email', '').strip() or None
+        
+        if warehouse_name:
+            if update_warehouse(warehouse_id, warehouse_name, address, city, state, country, county, zipcode, 
+                              latitude, longitude, contact_person, phone, email):
+                flash('Warehouse updated successfully!', 'success')
+            else:
+                flash('Failed to update warehouse.', 'error')
+        else:
+            flash('Please fill in the warehouse name.', 'error')
+        return redirect(url_for('warehouses_route'))
+    
+    low_stock_items = get_low_stock_items()
+    return render_template('edit_warehouse.html', warehouse=warehouse, low_stock_count=len(low_stock_items))
+
+@app.route('/warehouses/delete/<int:warehouse_id>')
+def delete_warehouse_route(warehouse_id):
+    """Delete a warehouse."""
+    if delete_warehouse(warehouse_id):
+        flash('Warehouse deleted successfully!', 'success')
+    else:
+        flash('Failed to delete warehouse.', 'error')
+    return redirect(url_for('warehouses_route'))
 
 
 if __name__ == '__main__':

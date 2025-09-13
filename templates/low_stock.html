@@ -40,6 +40,7 @@
                                  <tr>
                                      <th>Item Name</th>
                                      <th>Category</th>
+                                     <th>Warehouse</th>
                                      <th>Current Stock</th>
                                      <th>Minimum Stock</th>
                                      <th>Shortage</th>
@@ -51,8 +52,8 @@
                              </thead>
                             <tbody>
                                 {% for item in items %}
-                                    {% set is_out_of_stock = item[4] == 0 %}
-                                    {% set shortage = item[8] - item[4] if item[8] else 0 %}
+                                    {% set is_out_of_stock = item[5] == 0 %}
+                                    {% set shortage = item[9] - item[5] if item[9] else 0 %}
                                     <tr class="{% if is_out_of_stock %}out-of-stock{% else %}low-stock{% endif %}">
                                         <td>
                                             <strong>{{ item[1] }}</strong>
@@ -60,13 +61,14 @@
                                                 <br><small class="text-muted">{{ item[2][:50] }}{% if item[2]|length > 50 %}...{% endif %}</small>
                                             {% endif %}
                                         </td>
-                                        <td>{{ item[3] }}</td>
+                                        <td>{{ item[3] or '-' }}</td>
+                                        <td>{{ item[4] or '-' }}</td>
                                         <td>
                                             <span class="badge {% if is_out_of_stock %}bg-danger{% else %}bg-warning{% endif %} fs-6">
-                                                {{ item[4] }}
+                                                {{ item[5] }}
                                             </span>
                                         </td>
-                                        <td>{{ item[8] }}</td>
+                                        <td>{{ item[9] }}</td>
                                         <td>
                                             {% if shortage > 0 %}
                                                 <span class="badge bg-danger">-{{ shortage }}</span>
@@ -75,18 +77,18 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if item[6] %}
-                                                <strong>{{ item[6] }}</strong>
+                                            {% if item[7] %}
+                                                <strong>{{ item[7] }}</strong>
                                             {% else %}
                                                 <span class="text-muted">No supplier</span>
                                             {% endif %}
                                         </td>
-                                                                                 <td>{{ item[7] or '-' }}</td>
+                                                                                 <td>{{ item[8] or '-' }}</td>
                                          <td>
                                              <small class="text-muted">
-                                                 {% if item[10] %}
-                                                     {{ item[10].strftime('%Y-%m-%d') }}<br>
-                                                     <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
+                                                 {% if item[11] %}
+                                                     {{ item[11].strftime('%Y-%m-%d') }}<br>
+                                                     <span class="text-muted">{{ item[11].strftime('%H:%M') }}</span>
                                                  {% else %}
                                                      <span class="text-muted">Never</span>
                                                  {% endif %}
@@ -98,12 +100,12 @@
                                                     class="btn btn-sm btn-outline-primary" title="Update Stock">
                                                      <i class="fas fa-edit"></i> Update
                                                  </a>
-                                                 {% if item[6] %}
+                                                 {% if item[7] %}
                                                      <button type="button" class="btn btn-sm btn-outline-success reorder-btn" 
                                                              title="Quick reorder suggestion"
                                                              data-item-name="{{ item[1] }}"
-                                                             data-supplier="{{ item[6] }}"
-                                                             data-quantity="{{ shortage if shortage > 0 else item[8] }}">
+                                                             data-supplier="{{ item[7] }}"
+                                                             data-quantity="{{ shortage if shortage > 0 else item[9] }}">
                                                          <i class="fas fa-shopping-cart"></i> Reorder
                                                      </button>
                                                  {% endif %}
@@ -142,7 +144,7 @@
                     <div class="card text-center border-danger">
                         <div class="card-body">
                             <h5 class="card-title">Out of Stock</h5>
-                            <h3 class="text-danger">{{ items|selectattr(4, 'equalto', 0)|list|length }}</h3>
+                            <h3 class="text-danger">{{ items|selectattr(5, 'equalto', 0)|list|length }}</h3>
                         </div>
                     </div>
                 </div>
@@ -150,7 +152,7 @@
                     <div class="card text-center border-info">
                         <div class="card-body">
                             <h5 class="card-title">Items with Suppliers</h5>
-                            <h3 class="text-info">{{ items|selectattr(6, 'defined')|selectattr(6, 'ne', '')|list|length }}</h3>
+                            <h3 class="text-info">{{ items|selectattr(7, 'defined')|selectattr(7, 'ne', '')|list|length }}</h3>
                         </div>
                     </div>
                 </div>
