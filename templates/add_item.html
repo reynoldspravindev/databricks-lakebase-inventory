@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Add New Equipment - Inventory{% endblock %}
+{% block title %}Add New Item - Inventory Manager{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,7 +8,7 @@
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title mb-0">
-                    <i class="fas fa-plus"></i> Add New Equipment
+                    <i class="fas fa-plus"></i> Add New Item
                 </h3>
             </div>
             <div class="card-body">
@@ -18,7 +18,7 @@
                         <div class="col-md-6 mb-3">
                             <label for="item_name" class="form-label">Item Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="item_name" name="item_name" required 
-                                   placeholder="Enter equipment name">
+                                   placeholder="Enter item name">
                         </div>
 
                         <!-- Category -->
@@ -42,15 +42,30 @@
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
                         <textarea class="form-control" id="description" name="description" rows="3" 
-                                  placeholder="Enter detailed description of the equipment"></textarea>
+                                  placeholder="Enter detailed description of the item"></textarea>
                     </div>
 
                     <div class="row">
                         <!-- Quantity -->
                         <div class="col-md-4 mb-3">
                             <label for="quantity" class="form-label">Quantity <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" id="quantity" name="quantity" required 
-                                   min="0" placeholder="0">
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="quantity" name="quantity" required 
+                                       min="0" placeholder="0">
+                                <button class="btn btn-outline-info" type="button" id="getForecastBtn" 
+                                        title="Get AI-powered quantity suggestion">
+                                    <i class="fas fa-magic"></i>
+                                </button>
+                            </div>
+                            <div id="forecastSuggestion" class="mt-2" style="display: none;">
+                                <div class="alert alert-info">
+                                    <strong>AI Suggestion:</strong> <span id="suggestedQuantity"></span>
+                                    <br><small id="suggestionReasoning"></small>
+                                    <button type="button" class="btn btn-sm btn-outline-primary ms-2" id="applySuggestion">
+                                        Apply Suggestion
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Unit Price -->
@@ -72,9 +87,18 @@
                     <div class="row">
                         <!-- Supplier -->
                         <div class="col-md-6 mb-3">
-                            <label for="supplier" class="form-label">Supplier</label>
-                            <input type="text" class="form-control" id="supplier" name="supplier" 
-                                   placeholder="Enter supplier name">
+                            <label for="supplier_id" class="form-label">Supplier</label>
+                            <select class="form-select" id="supplier_id" name="supplier_id">
+                                <option value="">Select a supplier...</option>
+                                {% for supplier in suppliers %}
+                                    <option value="{{ supplier[0] }}">{{ supplier[1] }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <a href="{{ url_for('suppliers_route') }}" target="_blank">
+                                    <i class="fas fa-plus"></i> Manage Suppliers
+                                </a>
+                            </div>
                         </div>
 
                         <!-- Warehouse -->
@@ -94,15 +118,6 @@
                         </div>
                     </div>
 
-                    <div class="row">
-                        <!-- Location -->
-                        <div class="col-md-12 mb-3">
-                            <label for="location" class="form-label">Specific Location</label>
-                            <input type="text" class="form-control" id="location" name="location" 
-                                   placeholder="e.g., Room 101, Building B, Shelf A1">
-                            <div class="form-text">Specific location within the warehouse (optional)</div>
-                        </div>
-                    </div>
 
                     <!-- Total Value Display -->
                     <div class="mb-3">
@@ -138,6 +153,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const quantityInput = document.getElementById('quantity');
     const unitPriceInput = document.getElementById('unit_price');
     const totalValueSpan = document.getElementById('totalValue');
+    const getForecastBtn = document.getElementById('getForecastBtn');
+    const forecastSuggestion = document.getElementById('forecastSuggestion');
+    const suggestedQuantity = document.getElementById('suggestedQuantity');
+    const suggestionReasoning = document.getElementById('suggestionReasoning');
+    const applySuggestionBtn = document.getElementById('applySuggestion');
 
     function updateTotalValue() {
         const quantity = parseFloat(quantityInput.value) || 0;
@@ -146,8 +166,57 @@ document.addEventListener('DOMContentLoaded', function() {
         totalValueSpan.textContent = totalValue.toFixed(2);
     }
 
+    function getDemandForecast() {
+        const warehouseId = document.getElementById('warehouse_id').value;
+        const categoryId = document.getElementById('category_id').value;
+        const currentQuantity = 0; // For new items, current quantity is always 0
+        const newQuantity = parseInt(quantityInput.value) || 0;
+        const minimumStock = parseInt(document.getElementById('minimum_stock').value) || null;
+
+        if (!warehouseId || !categoryId) {
+            alert('Please select both warehouse and category before getting forecast suggestion.');
+            return;
+        }
+
+        getForecastBtn.disabled = true;
+        getForecastBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        const minStockParam = minimumStock ? minimumStock : '';
+        fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                suggestedQuantity.textContent = data.suggested_quantity;
+                suggestionReasoning.textContent = data.reasoning;
+                forecastSuggestion.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to get forecast suggestion. Please try again.');
+            })
+            .finally(() => {
+                getForecastBtn.disabled = false;
+                getForecastBtn.innerHTML = '<i class="fas fa-magic"></i>';
+            });
+    }
+
+    function applySuggestion() {
+        const suggested = suggestedQuantity.textContent;
+        if (suggested) {
+            quantityInput.value = suggested;
+            updateTotalValue();
+            forecastSuggestion.style.display = 'none';
+        }
+    }
+
     quantityInput.addEventListener('input', updateTotalValue);
     unitPriceInput.addEventListener('input', updateTotalValue);
+    getForecastBtn.addEventListener('click', getDemandForecast);
+    applySuggestionBtn.addEventListener('click', applySuggestion);
     
     // Initialize total value calculation
     updateTotalValue();

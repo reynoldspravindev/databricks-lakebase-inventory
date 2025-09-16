@@ -1,21 +1,42 @@
 {% extends "base.html" %}
 
-{% block title %}Equipment Inventory - Dashboard{% endblock %}
+{% block title %}Inventory Manager - Dashboard{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-boxes"></i> Equipment Inventory</h1>
+            <h1><i class="fas fa-boxes"></i> Inventory Manager</h1>
             <div>
                 <a href="{{ url_for('add_item_route') }}" class="btn btn-success">
                     <i class="fas fa-plus"></i> Add New Item
                 </a>
+                <button class="btn btn-primary ms-2" id="optimizeInventoryBtn" disabled 
+                        title="AI-powered inventory optimization (coming soon)">
+                    <i class="fas fa-robot"></i> Optimize Inventory
+                </button>
                 {% if low_stock_count > 0 %}
                     <a href="{{ url_for('low_stock_route') }}" class="btn btn-warning ms-2">
                         <i class="fas fa-exclamation-triangle"></i> Low Stock ({{ low_stock_count }})
                     </a>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- Warehouse Selector -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <label for="warehouseFilter" class="form-label"><strong>Select Warehouse:</strong></label>
+                        <select id="warehouseFilter" class="form-select form-select-lg">
+                            <option value="">All Warehouses</option>
+                            {% for warehouse in warehouses %}
+                                <option value="{{ warehouse[0] }}">{{ warehouse[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -58,7 +79,6 @@
                                     <th>Unit Price</th>
                                     <th>Total Value</th>
                                     <th>Supplier</th>
-                                    <th>Location</th>
                                     <th>Status</th>
                                     <th>Date Added</th>
                                     <th>Last Updated</th>
@@ -67,11 +87,12 @@
                             </thead>
                             <tbody>
                                 {% for item in items %}
-                                    {% set is_low_stock = item[9] and item[5] <= item[9] %}
-                                    {% set is_out_of_stock = item[5] == 0 %}
+                                    {% set is_low_stock = item[9] and item[6] <= item[9] %}
+                                    {% set is_out_of_stock = item[6] == 0 %}
                                     <tr class="{% if is_out_of_stock %}out-of-stock{% elif is_low_stock %}low-stock{% endif %}" 
                                         data-category="{{ item[3] }}" 
-                                        data-stock-status="{% if is_out_of_stock %}out{% elif is_low_stock %}low{% else %}normal{% endif %}">
+                                        data-stock-status="{% if is_out_of_stock %}out{% elif is_low_stock %}low{% else %}normal{% endif %}"
+                                        data-warehouse="{{ item[13] }}">
                                         <td>
                                             <strong>{{ item[1] }}</strong>
                                             {% if item[2] %}
@@ -82,16 +103,15 @@
                                         <td>{{ item[4] or '-' }}</td>
                                         <td>
                                             <span class="badge {% if is_out_of_stock %}bg-danger{% elif is_low_stock %}bg-warning{% else %}bg-success{% endif %}">
-                                                {{ item[5] }}
+                                                {{ item[6] }}
                                             </span>
                                             {% if item[9] %}
                                                 <br><small class="text-muted">Min: {{ item[9] }}</small>
                                             {% endif %}
                                         </td>
-                                        <td>${{ "%.2f"|format(item[6]) }}</td>
-                                        <td><strong>${{ "%.2f"|format(item[5] * item[6]) }}</strong></td>
-                                        <td>{{ item[7] or '-' }}</td>
-                                        <td>{{ item[8] or '-' }}</td>
+                                        <td>${{ "%.2f"|format(item[7]) }}</td>
+                                        <td><strong>${{ "%.2f"|format(item[6] * item[7]) }}</strong></td>
+                                        <td>{{ item[5] or '-' }}</td>
                                         <td>
                                             {% if is_out_of_stock %}
                                                 <span class="badge bg-danger">Out of Stock</span>
@@ -156,7 +176,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Total Items</h5>
-                                    <h3 class="text-primary">{{ items|length }}</h3>
+                                    <h3 class="text-primary" id="totalItemsCount">{{ items|length }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -164,7 +184,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Total Value</h5>
-                                    <h3 class="text-success">${{ "%.2f"|format(items|sum(attribute=5) * items|sum(attribute=6) if items else 0) }}</h3>
+                                    <h3 class="text-success" id="totalValueAmount">${{ "%.2f"|format(items|sum(attribute=6) * items|sum(attribute=7) if items else 0) }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -172,7 +192,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Categories</h5>
-                                    <h3 class="text-info">{{ items|map(attribute=3)|unique|list|length if items else 0 }}</h3>
+                                    <h3 class="text-info" id="categoriesCount">{{ items|map(attribute=3)|unique|list|length if items else 0 }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -180,7 +200,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Low Stock</h5>
-                                    <h3 class="text-warning">{{ low_stock_count }}</h3>
+                                    <h3 class="text-warning" id="lowStockCount">{{ low_stock_count }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -236,8 +256,8 @@
                 {% else %}
                     <div class="text-center py-5">
                         <i class="fas fa-boxes fa-5x text-muted mb-3"></i>
-                        <h3 class="text-muted">No Equipment Found</h3>
-                        <p class="text-muted">Start by adding your first piece of equipment to the inventory.</p>
+                        <h3 class="text-muted">No Items Found</h3>
+                        <p class="text-muted">Start by adding your first item to the inventory.</p>
                         <a href="{{ url_for('add_item_route') }}" class="btn btn-success btn-lg">
                             <i class="fas fa-plus"></i> Add First Item
                         </a>
@@ -255,6 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const categoryFilter = document.getElementById('categoryFilter');
     const stockFilter = document.getElementById('stockFilter');
+    const warehouseFilter = document.getElementById('warehouseFilter');
     const table = document.getElementById('inventoryTable');
     
     // Set current time
@@ -294,29 +315,71 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchTerm = searchInput.value.toLowerCase();
         const selectedCategory = categoryFilter.value;
         const selectedStock = stockFilter.value;
+        const selectedWarehouse = warehouseFilter.value;
         const rows = table.querySelectorAll('tbody tr');
+        
+        let visibleRows = [];
+        let totalValue = 0;
+        let categories = new Set();
+        let lowStockCount = 0;
         
         rows.forEach(row => {
             const itemName = row.querySelector('td:first-child').textContent.toLowerCase();
             const category = row.dataset.category;
             const stockStatus = row.dataset.stockStatus;
+            const warehouse = row.dataset.warehouse;
             
             const matchesSearch = itemName.includes(searchTerm);
             const matchesCategory = !selectedCategory || category === selectedCategory;
             const matchesStock = !selectedStock || stockStatus === selectedStock;
+            const matchesWarehouse = !selectedWarehouse || warehouse === selectedWarehouse;
             
-            if (matchesSearch && matchesCategory && matchesStock) {
+            if (matchesSearch && matchesCategory && matchesStock && matchesWarehouse) {
                 row.style.display = '';
+                visibleRows.push(row);
+                
+                // Calculate statistics for visible rows
+                const quantity = parseInt(row.querySelector('td:nth-child(4)').textContent) || 0;
+                const unitPrice = parseFloat(row.querySelector('td:nth-child(5)').textContent.replace('$', '')) || 0;
+                totalValue += quantity * unitPrice;
+                
+                if (category) categories.add(category);
+                if (stockStatus === 'low' || stockStatus === 'out') lowStockCount++;
             } else {
                 row.style.display = 'none';
             }
         });
+        
+        // Update summary statistics
+        updateSummaryStatistics(visibleRows.length, totalValue, categories.size, lowStockCount);
+    }
+    
+    // Function to update summary statistics
+    function updateSummaryStatistics(itemCount, totalValue, categoryCount, lowStockCount) {
+        const totalItemsElement = document.getElementById('totalItemsCount');
+        const totalValueElement = document.getElementById('totalValueAmount');
+        const categoriesElement = document.getElementById('categoriesCount');
+        const lowStockElement = document.getElementById('lowStockCount');
+        
+        if (totalItemsElement) totalItemsElement.textContent = itemCount;
+        if (totalValueElement) totalValueElement.textContent = '$' + totalValue.toFixed(2);
+        if (categoriesElement) categoriesElement.textContent = categoryCount;
+        if (lowStockElement) lowStockElement.textContent = lowStockCount;
     }
     
     // Add event listeners
     searchInput.addEventListener('input', filterTable);
     categoryFilter.addEventListener('change', filterTable);
     stockFilter.addEventListener('change', filterTable);
+    warehouseFilter.addEventListener('change', filterTable);
+    
+    // Optimize Inventory button (disabled for now)
+    const optimizeBtn = document.getElementById('optimizeInventoryBtn');
+    if (optimizeBtn) {
+        optimizeBtn.addEventListener('click', function() {
+            alert('Inventory optimization feature is coming soon! This will use AI/ML models to optimize inventory across all warehouses based on demand forecasts.');
+        });
+    }
 });
 </script>
 {% endblock %} 

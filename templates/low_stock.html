@@ -52,8 +52,8 @@
                              </thead>
                             <tbody>
                                 {% for item in items %}
-                                    {% set is_out_of_stock = item[5] == 0 %}
-                                    {% set shortage = item[9] - item[5] if item[9] else 0 %}
+                                    {% set is_out_of_stock = item[6] == 0 %}
+                                    {% set shortage = item[9] - item[6] if item[9] else 0 %}
                                     <tr class="{% if is_out_of_stock %}out-of-stock{% else %}low-stock{% endif %}">
                                         <td>
                                             <strong>{{ item[1] }}</strong>
@@ -65,7 +65,7 @@
                                         <td>{{ item[4] or '-' }}</td>
                                         <td>
                                             <span class="badge {% if is_out_of_stock %}bg-danger{% else %}bg-warning{% endif %} fs-6">
-                                                {{ item[5] }}
+                                                {{ item[6] }}
                                             </span>
                                         </td>
                                         <td>{{ item[9] }}</td>
@@ -77,8 +77,8 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if item[7] %}
-                                                <strong>{{ item[7] }}</strong>
+                                            {% if item[5] %}
+                                                <strong>{{ item[5] }}</strong>
                                             {% else %}
                                                 <span class="text-muted">No supplier</span>
                                             {% endif %}
@@ -100,11 +100,11 @@
                                                     class="btn btn-sm btn-outline-primary" title="Update Stock">
                                                      <i class="fas fa-edit"></i> Update
                                                  </a>
-                                                 {% if item[7] %}
+                                                 {% if item[5] %}
                                                      <button type="button" class="btn btn-sm btn-outline-success reorder-btn" 
                                                              title="Quick reorder suggestion"
                                                              data-item-name="{{ item[1] }}"
-                                                             data-supplier="{{ item[7] }}"
+                                                             data-supplier="{{ item[5] }}"
                                                              data-quantity="{{ shortage if shortage > 0 else item[9] }}">
                                                          <i class="fas fa-shopping-cart"></i> Reorder
                                                      </button>
@@ -144,7 +144,7 @@
                     <div class="card text-center border-danger">
                         <div class="card-body">
                             <h5 class="card-title">Out of Stock</h5>
-                            <h3 class="text-danger">{{ items|selectattr(5, 'equalto', 0)|list|length }}</h3>
+                            <h3 class="text-danger">{{ items|selectattr(6, 'equalto', 0)|list|length }}</h3>
                         </div>
                     </div>
                 </div>
@@ -152,7 +152,7 @@
                     <div class="card text-center border-info">
                         <div class="card-body">
                             <h5 class="card-title">Items with Suppliers</h5>
-                            <h3 class="text-info">{{ items|selectattr(7, 'defined')|selectattr(7, 'ne', '')|list|length }}</h3>
+                            <h3 class="text-info">{{ items|selectattr(5, 'defined')|selectattr(5, 'ne', '')|list|length }}</h3>
                         </div>
                     </div>
                 </div>

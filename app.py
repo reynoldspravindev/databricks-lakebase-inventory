@@ -80,6 +80,9 @@ def get_category_table_name():
 def get_warehouse_table_name():
     return os.getenv("POSTGRES_WAREHOUSE_TABLE", "inventory_warehouse")
 
+def get_supplier_table_name():
+    return os.getenv("POSTGRES_SUPPLIER_TABLE", "inventory_supplier")
+
 def init_database():
     """Initialize database schema and tables."""
     try:
@@ -89,6 +92,7 @@ def init_database():
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 category_table_name = get_category_table_name()
                 warehouse_table_name = get_warehouse_table_name()
+                supplier_table_name = get_supplier_table_name()
                 
                 print(f"🔧 Creating schema '{schema_name}' if it doesn't exist...")
                 cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
@@ -140,6 +144,37 @@ def init_database():
                 cur.execute(create_warehouse_table_sql)
                 print(f"✅ Table '{schema_name}.{warehouse_table_name}' ready")
                 
+                # Create supplier table
+                print(f"🔧 Creating table '{schema_name}.{supplier_table_name}' if it doesn't exist...")
+                create_supplier_table_sql = sql.SQL("""
+                    CREATE TABLE IF NOT EXISTS {}.{} (
+                        supplier_id serial4 NOT NULL,
+                        supplier_name varchar(100) NOT NULL,
+                        contact_person varchar(100) NULL,
+                        email varchar(100) NULL,
+                        phone varchar(20) NULL,
+                        address varchar(255) NULL,
+                        city varchar(100) NULL,
+                        state varchar(100) NULL,
+                        country varchar(100) NULL,
+                        county varchar(100) NULL,
+                        zipcode varchar(20) NULL,
+                        latitude decimal(10, 8) NULL,
+                        longitude decimal(11, 8) NULL,
+                        website varchar(255) NULL,
+                        tax_id varchar(50) NULL,
+                        payment_terms varchar(100) NULL,
+                        date_created timestamp DEFAULT CURRENT_TIMESTAMP,
+                        last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (supplier_id)
+                    );
+                """).format(
+                    sql.Identifier(schema_name), 
+                    sql.Identifier(supplier_table_name)
+                )
+                cur.execute(create_supplier_table_sql)
+                print(f"✅ Table '{schema_name}.{supplier_table_name}' ready")
+                
                 # Check if old inventory_items table exists and migrate data
                 print("🔧 Checking for existing inventory_items table...")
                 cur.execute(sql.SQL("""
@@ -163,9 +198,33 @@ def init_database():
                     
                     if has_old_schema:
                         print("🔧 Migrating existing data to new schema...")
-                        migrate_existing_data(conn, cur, schema_name, table_name, category_table_name, warehouse_table_name)
+                        migrate_existing_data(conn, cur, schema_name, table_name, category_table_name, warehouse_table_name, supplier_table_name)
                     else:
                         print("✅ Table already has new schema")
+                    
+                    # Check if supplier_id column exists, if not add it
+                    cur.execute(sql.SQL("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_schema = %s AND table_name = %s AND column_name = 'supplier_id'
+                    """), (schema_name, table_name))
+                    
+                    has_supplier_id = cur.fetchone() is not None
+                    
+                    if not has_supplier_id:
+                        print("🔧 Adding missing supplier_id column...")
+                        cur.execute(sql.SQL("""
+                            ALTER TABLE {}.{} 
+                            ADD COLUMN supplier_id int4 NULL,
+                            ADD CONSTRAINT fk_supplier 
+                            FOREIGN KEY (supplier_id) REFERENCES {}.{}(supplier_id) ON DELETE SET NULL
+                        """).format(
+                            sql.Identifier(schema_name), 
+                            sql.Identifier(table_name),
+                            sql.Identifier(schema_name),
+                            sql.Identifier(supplier_table_name)
+                        ))
+                        print("✅ Added supplier_id column")
                 else:
                     # Create new inventory_items table with foreign keys
                     print(f"🔧 Creating new table '{schema_name}.{table_name}'...")
@@ -176,16 +235,17 @@ def init_database():
                             description text NULL,
                             category_id int4 NOT NULL,
                             warehouse_id int4 NULL,
+                            supplier_id int4 NULL,
                             quantity int4 NOT NULL,
                             unit_price float8 NOT NULL,
-                            supplier varchar(100) NULL,
                             "location" varchar(100) NULL,
                             minimum_stock int4 NULL,
                             date_added timestamp DEFAULT CURRENT_TIMESTAMP,
                             last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
                             PRIMARY KEY (id),
                             FOREIGN KEY (category_id) REFERENCES {}.{}(category_id) ON DELETE RESTRICT,
-                            FOREIGN KEY (warehouse_id) REFERENCES {}.{}(warehouse_id) ON DELETE SET NULL
+                            FOREIGN KEY (warehouse_id) REFERENCES {}.{}(warehouse_id) ON DELETE SET NULL,
+                            FOREIGN KEY (supplier_id) REFERENCES {}.{}(supplier_id) ON DELETE SET NULL
                         );
                     """).format(
                         sql.Identifier(schema_name), 
@@ -193,7 +253,9 @@ def init_database():
                         sql.Identifier(schema_name),
                         sql.Identifier(category_table_name),
                         sql.Identifier(schema_name),
-                        sql.Identifier(warehouse_table_name)
+                        sql.Identifier(warehouse_table_name),
+                        sql.Identifier(schema_name),
+                        sql.Identifier(supplier_table_name)
                     )
                     
                     cur.execute(create_table_sql)
@@ -202,8 +264,8 @@ def init_database():
                 # Insert default categories if they don't exist
                 print("🔧 Inserting default categories...")
                 default_categories = [
-                    "Electronics", "Tools", "Furniture", "Vehicles", "Safety Equipment",
-                    "IT Equipment", "Office Supplies", "Medical Equipment", "Lab Equipment", "Construction"
+                    "Home", "Shoes", "Sports", "Children", "Men",
+                    "Music", "Books", "Jewelry", "Women", "Electronics"
                 ]
                 
                 for category in default_categories:
@@ -230,6 +292,22 @@ def init_database():
                 
                 print("✅ Default warehouse inserted")
                 
+                # Insert default suppliers if they don't exist
+                print("🔧 Inserting default suppliers...")
+                default_suppliers = [
+                    "Tech Supply Co.", "Office Solutions Inc.", "Industrial Equipment Ltd.", 
+                    "Safety First Supplies", "Global Logistics Corp.", "Quality Materials Inc."
+                ]
+                
+                for supplier in default_suppliers:
+                    cur.execute(sql.SQL("""
+                        INSERT INTO {}.{} (supplier_name) 
+                        VALUES (%s) 
+                        ON CONFLICT (supplier_name) DO NOTHING
+                    """).format(sql.Identifier(schema_name), sql.Identifier(supplier_table_name)), (supplier,))
+                
+                print("✅ Default suppliers inserted")
+                
                 conn.commit()
                 print("✅ Schema and tables creation committed")
                 return True
@@ -238,7 +316,7 @@ def init_database():
         print(f"❌ Database initialization error: {e}")
         return False
 
-def migrate_existing_data(conn, cur, schema_name, table_name, category_table_name, warehouse_table_name):
+def migrate_existing_data(conn, cur, schema_name, table_name, category_table_name, warehouse_table_name, supplier_table_name):
     """Migrate existing inventory_items data to new schema."""
     try:
         # Get all unique categories from existing data
@@ -256,12 +334,34 @@ def migrate_existing_data(conn, cur, schema_name, table_name, category_table_nam
                 ON CONFLICT (category_name) DO NOTHING
             """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)), (category,))
         
+        # Get all unique suppliers from existing data
+        cur.execute(sql.SQL("""
+            SELECT DISTINCT supplier FROM {}.{} WHERE supplier IS NOT NULL
+        """).format(sql.Identifier(schema_name), sql.Identifier(table_name)))
+        
+        existing_suppliers = [row[0] for row in cur.fetchall()]
+        
+        # Insert suppliers that don't exist
+        for supplier in existing_suppliers:
+            cur.execute(sql.SQL("""
+                INSERT INTO {}.{} (supplier_name) 
+                VALUES (%s) 
+                ON CONFLICT (supplier_name) DO NOTHING
+            """).format(sql.Identifier(schema_name), sql.Identifier(supplier_table_name)), (supplier,))
+        
         # Get category mappings
         cur.execute(sql.SQL("""
             SELECT category_id, category_name FROM {}.{}
         """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)))
         
         category_mapping = {name: cat_id for cat_id, name in cur.fetchall()}
+        
+        # Get supplier mappings
+        cur.execute(sql.SQL("""
+            SELECT supplier_id, supplier_name FROM {}.{}
+        """).format(sql.Identifier(schema_name), sql.Identifier(supplier_table_name)))
+        
+        supplier_mapping = {name: sup_id for sup_id, name in cur.fetchall()}
         
         # Get default warehouse ID
         cur.execute(sql.SQL("""
@@ -279,16 +379,17 @@ def migrate_existing_data(conn, cur, schema_name, table_name, category_table_nam
                 description text NULL,
                 category_id int4 NOT NULL,
                 warehouse_id int4 NULL,
+                supplier_id int4 NULL,
                 quantity int4 NOT NULL,
                 unit_price float8 NOT NULL,
-                supplier varchar(100) NULL,
                 "location" varchar(100) NULL,
                 minimum_stock int4 NULL,
                 date_added timestamp DEFAULT CURRENT_TIMESTAMP,
                 last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 FOREIGN KEY (category_id) REFERENCES {}.{}(category_id) ON DELETE RESTRICT,
-                FOREIGN KEY (warehouse_id) REFERENCES {}.{}(warehouse_id) ON DELETE SET NULL
+                FOREIGN KEY (warehouse_id) REFERENCES {}.{}(warehouse_id) ON DELETE SET NULL,
+                FOREIGN KEY (supplier_id) REFERENCES {}.{}(supplier_id) ON DELETE SET NULL
             );
         """).format(
             sql.Identifier(schema_name), 
@@ -296,34 +397,39 @@ def migrate_existing_data(conn, cur, schema_name, table_name, category_table_nam
             sql.Identifier(schema_name),
             sql.Identifier(category_table_name),
             sql.Identifier(schema_name),
-            sql.Identifier(warehouse_table_name)
+            sql.Identifier(warehouse_table_name),
+            sql.Identifier(schema_name),
+            sql.Identifier(supplier_table_name)
         ))
         
-        # Migrate data with proper category mapping
+        # Migrate data with proper category and supplier mapping
         cur.execute(sql.SQL("""
             INSERT INTO {}.{}_new 
-            (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated)
+            (item_name, description, category_id, warehouse_id, supplier_id, quantity, unit_price, location, minimum_stock, date_added, last_updated)
             SELECT 
                 i.item_name, 
                 i.description, 
                 COALESCE(c.category_id, 1), 
                 %s, 
+                COALESCE(s.supplier_id, NULL), 
                 i.quantity, 
                 i.unit_price, 
-                i.supplier, 
                 i.location, 
                 i.minimum_stock, 
                 i.date_added, 
                 i.last_updated
             FROM {}.{} i
             LEFT JOIN {}.{} c ON i.category = c.category_name
+            LEFT JOIN {}.{} s ON i.supplier = s.supplier_name
         """).format(
             sql.Identifier(schema_name), 
             sql.Identifier(table_name),
             sql.Identifier(schema_name), 
             sql.Identifier(table_name),
             sql.Identifier(schema_name),
-            sql.Identifier(category_table_name)
+            sql.Identifier(category_table_name),
+            sql.Identifier(schema_name),
+            sql.Identifier(supplier_table_name)
         ), (default_warehouse_id,))
         
         # Drop old table and rename new one
@@ -411,18 +517,35 @@ def update_category(category_id, category_name, description=None):
         return False
 
 def delete_category(category_id):
-    """Delete a category."""
+    """Delete a category if no items are using it."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
                 category_table = get_category_table_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                
+                # First, check if any items are using this category
+                cur.execute(sql.SQL("""
+                    SELECT COUNT(*) 
+                    FROM {}.{} 
+                    WHERE category_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(table_name)), (category_id,))
+                
+                item_count = cur.fetchone()[0]
+                
+                if item_count > 0:
+                    print(f"Cannot delete category {category_id}: {item_count} items are using this category")
+                    return False, f"Cannot delete category. {item_count} items are currently using this category. Please reassign or delete those items first."
+                
+                # If no items are using this category, proceed with deletion
                 cur.execute(sql.SQL("DELETE FROM {}.{} WHERE category_id = %s").format(sql.Identifier(schema), sql.Identifier(category_table)), (category_id,))
                 conn.commit()
-                return True
+                return True, "Category deleted successfully!"
+                
     except Exception as e:
         print(f"Delete category error: {e}")
-        return False
+        return False, f"Error deleting category: {str(e)}"
 
 # Warehouse management functions
 def get_warehouses():
@@ -517,7 +640,102 @@ def delete_warehouse(warehouse_id):
         print(f"Delete warehouse error: {e}")
         return False
 
-def add_inventory_item(item_name, description, category_id, quantity, unit_price, supplier=None, location=None, minimum_stock=None, warehouse_id=None):
+# Supplier management functions
+def get_suppliers():
+    """Get all suppliers."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                supplier_table = get_supplier_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT supplier_id, supplier_name, contact_person, email, phone, address, city, state, country, 
+                           county, zipcode, latitude, longitude, website, tax_id, payment_terms, date_created, last_updated 
+                    FROM {}.{} ORDER BY supplier_name ASC
+                """).format(sql.Identifier(schema), sql.Identifier(supplier_table)))
+                return cur.fetchall()
+    except Exception as e:
+        print(f"Get suppliers error: {e}")
+        return []
+
+def get_supplier(supplier_id):
+    """Get a specific supplier by ID."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                supplier_table = get_supplier_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT supplier_id, supplier_name, contact_person, email, phone, address, city, state, country, 
+                           county, zipcode, latitude, longitude, website, tax_id, payment_terms, date_created, last_updated 
+                    FROM {}.{} WHERE supplier_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(supplier_table)), (supplier_id,))
+                return cur.fetchone()
+    except Exception as e:
+        print(f"Get supplier error: {e}")
+        return None
+
+def add_supplier(supplier_name, contact_person=None, email=None, phone=None, address=None, city=None, state=None, 
+                country=None, county=None, zipcode=None, latitude=None, longitude=None, website=None, 
+                tax_id=None, payment_terms=None):
+    """Add a new supplier."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                supplier_table = get_supplier_table_name()
+                cur.execute(sql.SQL("""
+                    INSERT INTO {}.{} (supplier_name, contact_person, email, phone, address, city, state, country, 
+                                     county, zipcode, latitude, longitude, website, tax_id, payment_terms, date_created, last_updated) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(supplier_table)), 
+                (supplier_name, contact_person, email, phone, address, city, state, country, county, zipcode, 
+                 latitude, longitude, website, tax_id, payment_terms, datetime.now(), datetime.now()))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Add supplier error: {e}")
+        return False
+
+def update_supplier(supplier_id, supplier_name, contact_person=None, email=None, phone=None, address=None, city=None, 
+                   state=None, country=None, county=None, zipcode=None, latitude=None, longitude=None, website=None, 
+                   tax_id=None, payment_terms=None):
+    """Update an existing supplier."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                supplier_table = get_supplier_table_name()
+                cur.execute(sql.SQL("""
+                    UPDATE {}.{} 
+                    SET supplier_name = %s, contact_person = %s, email = %s, phone = %s, address = %s, city = %s, 
+                        state = %s, country = %s, county = %s, zipcode = %s, latitude = %s, longitude = %s, 
+                        website = %s, tax_id = %s, payment_terms = %s, last_updated = %s
+                    WHERE supplier_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(supplier_table)), 
+                (supplier_name, contact_person, email, phone, address, city, state, country, county, zipcode, 
+                 latitude, longitude, website, tax_id, payment_terms, datetime.now(), supplier_id))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Update supplier error: {e}")
+        return False
+
+def delete_supplier(supplier_id):
+    """Delete a supplier."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                supplier_table = get_supplier_table_name()
+                cur.execute(sql.SQL("DELETE FROM {}.{} WHERE supplier_id = %s").format(sql.Identifier(schema), sql.Identifier(supplier_table)), (supplier_id,))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Delete supplier error: {e}")
+        return False
+
+def add_inventory_item(item_name, description, category_id, quantity, unit_price, supplier_id=None, location=None, minimum_stock=None, warehouse_id=None):
     """Add a new inventory item."""
     try:
         with get_connection() as conn:
@@ -526,10 +744,10 @@ def add_inventory_item(item_name, description, category_id, quantity, unit_price
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 cur.execute(sql.SQL("""
                     INSERT INTO {}.{} 
-                    (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
+                    (item_name, description, category_id, warehouse_id, supplier_id, quantity, unit_price, location, minimum_stock, date_added, last_updated) 
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """).format(sql.Identifier(schema), sql.Identifier(table_name)), 
-                (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()))
+                (item_name, description, category_id, warehouse_id, supplier_id, quantity, unit_price, location, minimum_stock, datetime.now(), datetime.now()))
                 conn.commit()
                 return True
     except Exception as e:
@@ -547,7 +765,7 @@ def add_inventory_items_bulk(items_data):
                 # Prepare the bulk insert
                 insert_query = sql.SQL("""
                     INSERT INTO {}.{} 
-                    (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, date_added, last_updated) 
+                    (item_name, description, category_id, warehouse_id, supplier_id, quantity, unit_price, location, minimum_stock, date_added, last_updated) 
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """).format(sql.Identifier(schema), sql.Identifier(table_name))
                 
@@ -589,6 +807,21 @@ def validate_csv_row(row, row_num):
         if not category_id:
             errors.append(f"Row {row_num}: category '{category_name}' not found. Please add it first.")
     
+    # Validate warehouse_id (now required)
+    warehouse_id = None
+    try:
+        warehouse_id = int(row.get('warehouse_id', 0))
+        if warehouse_id <= 0:
+            errors.append(f"Row {row_num}: warehouse_id is required and must be a positive integer")
+        else:
+            # Verify warehouse exists
+            warehouses = get_warehouses()
+            warehouse_exists = any(wh[0] == warehouse_id for wh in warehouses)
+            if not warehouse_exists:
+                errors.append(f"Row {row_num}: warehouse_id {warehouse_id} not found. Please check warehouse ID.")
+    except (ValueError, TypeError):
+        errors.append(f"Row {row_num}: warehouse_id must be a valid integer")
+    
     # Validate quantity
     try:
         quantity = int(row.get('quantity', 0))
@@ -610,13 +843,9 @@ def validate_csv_row(row, row_num):
     # Optional fields with length validation
     description = row.get('description', '').strip()
     supplier = row.get('supplier', '').strip() or None
-    location = row.get('location', '').strip() or None
     
     if supplier and len(supplier) > 100:
         errors.append(f"Row {row_num}: supplier must be 100 characters or less")
-        
-    if location and len(location) > 100:
-        errors.append(f"Row {row_num}: location must be 100 characters or less")
     
     # Validate minimum_stock
     minimum_stock = None
@@ -628,22 +857,22 @@ def validate_csv_row(row, row_num):
         except (ValueError, TypeError):
             errors.append(f"Row {row_num}: minimum_stock must be a valid number or empty")
     
-    # Get warehouse_id from warehouse name if provided
-    warehouse_id = None
-    warehouse_name = row.get('warehouse', '').strip()
-    if warehouse_name:
-        warehouses = get_warehouses()
-        for wh in warehouses:
-            if wh[1].lower() == warehouse_name.lower():  # wh[1] is warehouse_name
-                warehouse_id = wh[0]  # wh[0] is warehouse_id
+    # Get supplier_id from supplier name if provided
+    supplier_id = None
+    supplier_name = row.get('supplier', '').strip()
+    if supplier_name:
+        suppliers = get_suppliers()
+        for sup in suppliers:
+            if sup[1].lower() == supplier_name.lower():  # sup[1] is supplier_name
+                supplier_id = sup[0]  # sup[0] is supplier_id
                 break
-        if not warehouse_id:
-            errors.append(f"Row {row_num}: warehouse '{warehouse_name}' not found. Please add it first.")
+        if not supplier_id:
+            errors.append(f"Row {row_num}: supplier '{supplier_name}' not found. Please add it first.")
     
     if errors:
         return None, errors
     
-    return (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), datetime.now()), []
+    return (item_name, description, category_id, warehouse_id, supplier_id, quantity, unit_price, None, minimum_stock, datetime.now(), datetime.now()), []
 
 def process_csv_file(file_content):
     """Process uploaded CSV file and return results."""
@@ -652,8 +881,8 @@ def process_csv_file(file_content):
         csv_reader = csv.DictReader(io.StringIO(file_content))
         
         # Expected columns
-        required_columns = {'item_name', 'category', 'quantity', 'unit_price'}
-        optional_columns = {'description', 'supplier', 'location', 'minimum_stock', 'warehouse'}
+        required_columns = {'item_name', 'category', 'warehouse_id', 'quantity', 'unit_price'}
+        optional_columns = {'description', 'supplier', 'minimum_stock'}
         all_columns = required_columns.union(optional_columns)
         
         # Check if required columns exist
@@ -713,7 +942,7 @@ def process_csv_file(file_content):
         }
 
 def get_inventory_items():
-    """Get all inventory items with category and warehouse information."""
+    """Get all inventory items with category, warehouse, and supplier information."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -721,18 +950,21 @@ def get_inventory_items():
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 category_table = get_category_table_name()
                 warehouse_table = get_warehouse_table_name()
+                supplier_table = get_supplier_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, 
-                           i.quantity, i.unit_price, i.supplier, i.location, i.minimum_stock, 
-                           i.date_added, i.last_updated, i.category_id, i.warehouse_id
+                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, s.supplier_name,
+                           i.quantity, i.unit_price, i.location, i.minimum_stock, 
+                           i.date_added, i.last_updated, i.category_id, i.warehouse_id, i.supplier_id
                     FROM {}.{} i
                     LEFT JOIN {}.{} c ON i.category_id = c.category_id
                     LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
+                    LEFT JOIN {}.{} s ON i.supplier_id = s.supplier_id
                     ORDER BY i.item_name ASC
                 """).format(
                     sql.Identifier(schema), sql.Identifier(table_name),
                     sql.Identifier(schema), sql.Identifier(category_table),
-                    sql.Identifier(schema), sql.Identifier(warehouse_table)
+                    sql.Identifier(schema), sql.Identifier(warehouse_table),
+                    sql.Identifier(schema), sql.Identifier(supplier_table)
                 ))
                 return cur.fetchall()
     except Exception as e:
@@ -740,7 +972,7 @@ def get_inventory_items():
         return []
 
 def get_inventory_item(item_id):
-    """Get a specific inventory item by ID with category and warehouse information."""
+    """Get a specific inventory item by ID with category, warehouse, and supplier information."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -748,25 +980,28 @@ def get_inventory_item(item_id):
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 category_table = get_category_table_name()
                 warehouse_table = get_warehouse_table_name()
+                supplier_table = get_supplier_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, 
-                           i.quantity, i.unit_price, i.supplier, i.location, i.minimum_stock, 
-                           i.date_added, i.last_updated, i.category_id, i.warehouse_id
+                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, s.supplier_name,
+                           i.quantity, i.unit_price, i.location, i.minimum_stock, 
+                           i.date_added, i.last_updated, i.category_id, i.warehouse_id, i.supplier_id
                     FROM {}.{} i
                     LEFT JOIN {}.{} c ON i.category_id = c.category_id
                     LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
+                    LEFT JOIN {}.{} s ON i.supplier_id = s.supplier_id
                     WHERE i.id = %s
                 """).format(
                     sql.Identifier(schema), sql.Identifier(table_name),
                     sql.Identifier(schema), sql.Identifier(category_table),
-                    sql.Identifier(schema), sql.Identifier(warehouse_table)
+                    sql.Identifier(schema), sql.Identifier(warehouse_table),
+                    sql.Identifier(schema), sql.Identifier(supplier_table)
                 ), (item_id,))
                 return cur.fetchone()
     except Exception as e:
         print(f"Get inventory item error: {e}")
         return None
 
-def update_inventory_item(item_id, item_name, description, category_id, quantity, unit_price, supplier=None, location=None, minimum_stock=None, warehouse_id=None):
+def update_inventory_item(item_id, item_name, description, category_id, quantity, unit_price, supplier_id=None, location=None, minimum_stock=None, warehouse_id=None):
     """Update an existing inventory item."""
     try:
         with get_connection() as conn:
@@ -775,11 +1010,11 @@ def update_inventory_item(item_id, item_name, description, category_id, quantity
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 cur.execute(sql.SQL("""
                     UPDATE {}.{} 
-                    SET item_name = %s, description = %s, category_id = %s, warehouse_id = %s, quantity = %s, unit_price = %s, 
-                        supplier = %s, location = %s, minimum_stock = %s, last_updated = %s
+                    SET item_name = %s, description = %s, category_id = %s, warehouse_id = %s, supplier_id = %s, 
+                        quantity = %s, unit_price = %s, location = %s, minimum_stock = %s, last_updated = %s
                     WHERE id = %s
                 """).format(sql.Identifier(schema), sql.Identifier(table_name)), 
-                (item_name, description, category_id, warehouse_id, quantity, unit_price, supplier, location, minimum_stock, datetime.now(), item_id))
+                (item_name, description, category_id, warehouse_id, supplier_id, quantity, unit_price, location, minimum_stock, datetime.now(), item_id))
                 conn.commit()
                 return True
     except Exception as e:
@@ -809,24 +1044,117 @@ def get_low_stock_items():
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
                 category_table = get_category_table_name()
                 warehouse_table = get_warehouse_table_name()
+                supplier_table = get_supplier_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, 
-                           i.quantity, i.unit_price, i.supplier, i.location, i.minimum_stock, 
-                           i.date_added, i.last_updated, i.category_id, i.warehouse_id
+                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, s.supplier_name,
+                           i.quantity, i.unit_price, i.location, i.minimum_stock, 
+                           i.date_added, i.last_updated, i.category_id, i.warehouse_id, i.supplier_id
                     FROM {}.{} i
                     LEFT JOIN {}.{} c ON i.category_id = c.category_id
                     LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
+                    LEFT JOIN {}.{} s ON i.supplier_id = s.supplier_id
                     WHERE i.minimum_stock IS NOT NULL AND i.quantity <= i.minimum_stock
                     ORDER BY (i.quantity - i.minimum_stock) ASC
                 """).format(
                     sql.Identifier(schema), sql.Identifier(table_name),
                     sql.Identifier(schema), sql.Identifier(category_table),
-                    sql.Identifier(schema), sql.Identifier(warehouse_table)
+                    sql.Identifier(schema), sql.Identifier(warehouse_table),
+                    sql.Identifier(schema), sql.Identifier(supplier_table)
                 ))
                 return cur.fetchall()
     except Exception as e:
         print(f"Get low stock items error: {e}")
         return []
+
+def get_demand_forecast_suggestion(warehouse_id, category_id, current_quantity, minimum_stock, new_quantity=0):
+    """Get suggested quantity based on demand forecast with smart inventory analysis."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                
+                # Get detailed forecast data for the next 30 days (daily granularity)
+                cur.execute(sql.SQL("""
+                    SELECT forecast_date, forecasted_items
+                    FROM {}.inventory_demand_forecast 
+                    WHERE warehouse_id = %s AND category_id = %s 
+                    AND forecast_date >= CURRENT_DATE 
+                    AND forecast_date <= CURRENT_DATE + INTERVAL '30 days'
+                    ORDER BY forecast_date
+                """).format(sql.Identifier(schema)), (warehouse_id, category_id))
+                
+                forecast_data = cur.fetchall()
+                
+                if forecast_data:
+                    # Calculate total forecast and analyze daily requirements
+                    total_forecast = sum(float(row[1]) for row in forecast_data)
+                    daily_forecasts = [(row[0], float(row[1])) for row in forecast_data]
+                    
+                    # Calculate total available inventory (current + new quantity being added)
+                    total_available = current_quantity + new_quantity
+                    
+                    # Calculate safety stock (minimum_stock or 10% of total forecast, whichever is higher)
+                    safety_stock = max(
+                        minimum_stock if minimum_stock else 0,
+                        max(1, int(total_forecast * 0.1))
+                    )
+                    
+                    # Calculate recommended total inventory (forecast + safety stock)
+                    recommended_total = int(total_forecast) + safety_stock
+                    
+                    # Check if current inventory + new quantity meets demand
+                    if total_available >= recommended_total:
+                        # Current inventory is sufficient, suggest minimal increase or no change
+                        if total_available >= recommended_total + safety_stock:
+                            # Very well stocked, suggest no increase
+                            suggested_quantity = new_quantity
+                            reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} is sufficient for 30-day forecast ({int(total_forecast)}) + safety stock ({safety_stock}). No additional increase needed."
+                        else:
+                            # Adequate but could use small buffer
+                            suggested_quantity = new_quantity + max(1, int(safety_stock * 0.2))
+                            reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} meets forecast ({int(total_forecast)}) but adding small buffer for safety."
+                    else:
+                        # Insufficient inventory, calculate needed increase
+                        needed_increase = recommended_total - total_available
+                        suggested_quantity = new_quantity + needed_increase
+                        reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} insufficient for 30-day forecast ({int(total_forecast)}) + safety stock ({safety_stock}). Suggest adding {needed_increase} more items."
+                    
+                    return {
+                        'suggested_quantity': suggested_quantity,
+                        'forecast_30_days': int(total_forecast),
+                        'safety_stock': safety_stock,
+                        'current_total_available': total_available,
+                        'recommended_total': recommended_total,
+                        'reasoning': reasoning
+                    }
+                else:
+                    # No forecast data available, use minimum stock logic
+                    if minimum_stock and current_quantity + new_quantity < minimum_stock:
+                        needed_increase = minimum_stock - (current_quantity + new_quantity)
+                        suggested_quantity = new_quantity + needed_increase
+                        reasoning = f"No forecast data available. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} below minimum stock ({minimum_stock}). Suggest adding {needed_increase} more items."
+                    else:
+                        suggested_quantity = new_quantity
+                        reasoning = f"No forecast data available. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} meets minimum stock requirement ({minimum_stock if minimum_stock else 'not set'})."
+                    
+                    return {
+                        'suggested_quantity': suggested_quantity,
+                        'forecast_30_days': 0,
+                        'safety_stock': minimum_stock if minimum_stock else 1,
+                        'current_total_available': current_quantity + new_quantity,
+                        'recommended_total': minimum_stock if minimum_stock else current_quantity + new_quantity,
+                        'reasoning': reasoning
+                    }
+    except Exception as e:
+        print(f"Get demand forecast error: {e}")
+        return {
+            'suggested_quantity': new_quantity + 1,
+            'forecast_30_days': 0,
+            'safety_stock': minimum_stock if minimum_stock else 1,
+            'current_total_available': current_quantity + new_quantity,
+            'recommended_total': current_quantity + new_quantity + 1,
+            'reasoning': "Error retrieving forecast data. Suggesting small increase."
+        }
 
 def get_dashboard_embed_url():
     """Generate dashboard embed URL with proper authentication."""
@@ -876,7 +1204,8 @@ def index():
     """Main page showing all inventory items."""
     items = get_inventory_items()
     low_stock_items = get_low_stock_items()
-    return render_template('index.html', items=items, low_stock_count=len(low_stock_items))
+    warehouses = get_warehouses()
+    return render_template('index.html', items=items, low_stock_count=len(low_stock_items), warehouses=warehouses)
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_item_route():
@@ -886,14 +1215,13 @@ def add_item_route():
         description = request.form.get('description', '').strip()
         category_id = request.form.get('category_id', type=int)
         warehouse_id = request.form.get('warehouse_id', type=int) or None
+        supplier_id = request.form.get('supplier_id', type=int) or None
         quantity = request.form.get('quantity', type=int)
         unit_price = request.form.get('unit_price', type=float)
-        supplier = request.form.get('supplier', '').strip() or None
-        location = request.form.get('location', '').strip() or None
         minimum_stock = request.form.get('minimum_stock', type=int) or None
         
         if item_name and category_id and quantity is not None and unit_price is not None:
-            if add_inventory_item(item_name, description, category_id, quantity, unit_price, supplier, location, minimum_stock, warehouse_id):
+            if add_inventory_item(item_name, description, category_id, quantity, unit_price, supplier_id, None, minimum_stock, warehouse_id):
                 flash('Item added successfully!', 'success')
             else:
                 flash('Failed to add item.', 'error')
@@ -903,8 +1231,9 @@ def add_item_route():
     
     categories = get_categories()
     warehouses = get_warehouses()
+    suppliers = get_suppliers()
     low_stock_items = get_low_stock_items()
-    return render_template('add_item.html', categories=categories, warehouses=warehouses, low_stock_count=len(low_stock_items))
+    return render_template('add_item.html', categories=categories, warehouses=warehouses, suppliers=suppliers, low_stock_count=len(low_stock_items))
 
 @app.route('/upload-csv', methods=['GET', 'POST'])
 def upload_csv_route():
@@ -978,10 +1307,10 @@ def download_template():
     from flask import Response
     
     # Create CSV template content
-    template_content = """item_name,description,category,quantity,unit_price,supplier,location,minimum_stock
-"Laptop - Example Model","High-performance laptop for office use","Electronics",5,1299.99,"Tech Supplier Co.","IT Storage Room",2
-"Office Desk","Adjustable height standing desk","Furniture",10,399.50,"Office Furniture Ltd.","Warehouse A",3
-"Safety Helmet","OSHA approved construction helmet","Safety Equipment",25,29.99,"Safety First Inc.","Safety Storage",10"""
+    template_content = """item_name,description,category,warehouse_id,quantity,unit_price,supplier,minimum_stock
+"Laptop - Example Model","High-performance laptop for office use","Electronics",1,5,1299.99,"Tech Supplier Co.",2
+"Office Desk","Adjustable height standing desk","Furniture",2,10,399.50,"Office Furniture Ltd.",3
+"Safety Helmet","OSHA approved construction helmet","Safety Equipment",1,25,29.99,"Safety First Inc.",10"""
     
     return Response(
         template_content,
@@ -1002,14 +1331,13 @@ def edit_item_route(item_id):
         description = request.form.get('description', '').strip()
         category_id = request.form.get('category_id', type=int)
         warehouse_id = request.form.get('warehouse_id', type=int) or None
+        supplier_id = request.form.get('supplier_id', type=int) or None
         quantity = request.form.get('quantity', type=int)
         unit_price = request.form.get('unit_price', type=float)
-        supplier = request.form.get('supplier', '').strip() or None
-        location = request.form.get('location', '').strip() or None
         minimum_stock = request.form.get('minimum_stock', type=int) or None
         
         if item_name and category_id and quantity is not None and unit_price is not None:
-            if update_inventory_item(item_id, item_name, description, category_id, quantity, unit_price, supplier, location, minimum_stock, warehouse_id):
+            if update_inventory_item(item_id, item_name, description, category_id, quantity, unit_price, supplier_id, None, minimum_stock, warehouse_id):
                 flash('Item updated successfully!', 'success')
             else:
                 flash('Failed to update item.', 'error')
@@ -1019,8 +1347,9 @@ def edit_item_route(item_id):
     
     categories = get_categories()
     warehouses = get_warehouses()
+    suppliers = get_suppliers()
     low_stock_items = get_low_stock_items()
-    return render_template('edit_item.html', item=item, categories=categories, warehouses=warehouses, low_stock_count=len(low_stock_items))
+    return render_template('edit_item.html', item=item, categories=categories, warehouses=warehouses, suppliers=suppliers, low_stock_count=len(low_stock_items))
 
 @app.route('/delete/<int:item_id>')
 def delete_item_route(item_id):
@@ -1073,15 +1402,16 @@ def api_items():
             'description': item[2],
             'category_name': item[3],
             'warehouse_name': item[4],
-            'quantity': item[5],
-            'unit_price': item[6],
-            'supplier': item[7],
+            'supplier_name': item[5],
+            'quantity': item[6],
+            'unit_price': item[7],
             'location': item[8],
             'minimum_stock': item[9],
             'date_added': item[10].isoformat() if item[10] else None,
             'last_updated': item[11].isoformat() if item[11] else None,
             'category_id': item[12],
-            'warehouse_id': item[13]
+            'warehouse_id': item[13],
+            'supplier_id': item[14]
         })
     return jsonify(items_list)
 
@@ -1104,6 +1434,21 @@ def api_dashboard_config():
         'public_url': get_dashboard_public_url(),
         'configured': get_dashboard_embed_url() is not None
     })
+
+@app.route('/api/demand-forecast')
+def api_demand_forecast():
+    """API endpoint to get demand forecast suggestion."""
+    warehouse_id = request.args.get('warehouse_id', type=int)
+    category_id = request.args.get('category_id', type=int)
+    current_quantity = request.args.get('current_quantity', 0, type=int)
+    minimum_stock = request.args.get('minimum_stock', type=int)
+    new_quantity = request.args.get('new_quantity', 0, type=int)
+    
+    if not warehouse_id or not category_id:
+        return jsonify({'error': 'warehouse_id and category_id are required'}), 400
+    
+    suggestion = get_demand_forecast_suggestion(warehouse_id, category_id, current_quantity, minimum_stock, new_quantity)
+    return jsonify(suggestion)
 
 # Category management routes
 @app.route('/categories')
@@ -1159,10 +1504,11 @@ def edit_category_route(category_id):
 @app.route('/categories/delete/<int:category_id>')
 def delete_category_route(category_id):
     """Delete a category."""
-    if delete_category(category_id):
-        flash('Category deleted successfully!', 'success')
+    success, message = delete_category(category_id)
+    if success:
+        flash(message, 'success')
     else:
-        flash('Failed to delete category. Make sure no items are using this category.', 'error')
+        flash(message, 'error')
     return redirect(url_for('categories_route'))
 
 # Warehouse management routes
@@ -1246,6 +1592,94 @@ def delete_warehouse_route(warehouse_id):
     else:
         flash('Failed to delete warehouse.', 'error')
     return redirect(url_for('warehouses_route'))
+
+# Supplier management routes
+@app.route('/suppliers')
+def suppliers_route():
+    """Show all suppliers."""
+    suppliers = get_suppliers()
+    low_stock_items = get_low_stock_items()
+    return render_template('suppliers.html', suppliers=suppliers, low_stock_count=len(low_stock_items))
+
+@app.route('/suppliers/add', methods=['GET', 'POST'])
+def add_supplier_route():
+    """Add a new supplier."""
+    if request.method == 'POST':
+        supplier_name = request.form.get('supplier_name', '').strip()
+        contact_person = request.form.get('contact_person', '').strip() or None
+        email = request.form.get('email', '').strip() or None
+        phone = request.form.get('phone', '').strip() or None
+        address = request.form.get('address', '').strip() or None
+        city = request.form.get('city', '').strip() or None
+        state = request.form.get('state', '').strip() or None
+        country = request.form.get('country', '').strip() or None
+        county = request.form.get('county', '').strip() or None
+        zipcode = request.form.get('zipcode', '').strip() or None
+        latitude = request.form.get('latitude', type=float) or None
+        longitude = request.form.get('longitude', type=float) or None
+        website = request.form.get('website', '').strip() or None
+        tax_id = request.form.get('tax_id', '').strip() or None
+        payment_terms = request.form.get('payment_terms', '').strip() or None
+        
+        if supplier_name:
+            if add_supplier(supplier_name, contact_person, email, phone, address, city, state, country, county, 
+                          zipcode, latitude, longitude, website, tax_id, payment_terms):
+                flash('Supplier added successfully!', 'success')
+            else:
+                flash('Failed to add supplier.', 'error')
+        else:
+            flash('Please fill in the supplier name.', 'error')
+        return redirect(url_for('suppliers_route'))
+    
+    low_stock_items = get_low_stock_items()
+    return render_template('add_supplier.html', low_stock_count=len(low_stock_items))
+
+@app.route('/suppliers/edit/<int:supplier_id>', methods=['GET', 'POST'])
+def edit_supplier_route(supplier_id):
+    """Edit an existing supplier."""
+    supplier = get_supplier(supplier_id)
+    if not supplier:
+        flash('Supplier not found.', 'error')
+        return redirect(url_for('suppliers_route'))
+    
+    if request.method == 'POST':
+        supplier_name = request.form.get('supplier_name', '').strip()
+        contact_person = request.form.get('contact_person', '').strip() or None
+        email = request.form.get('email', '').strip() or None
+        phone = request.form.get('phone', '').strip() or None
+        address = request.form.get('address', '').strip() or None
+        city = request.form.get('city', '').strip() or None
+        state = request.form.get('state', '').strip() or None
+        country = request.form.get('country', '').strip() or None
+        county = request.form.get('county', '').strip() or None
+        zipcode = request.form.get('zipcode', '').strip() or None
+        latitude = request.form.get('latitude', type=float) or None
+        longitude = request.form.get('longitude', type=float) or None
+        website = request.form.get('website', '').strip() or None
+        tax_id = request.form.get('tax_id', '').strip() or None
+        payment_terms = request.form.get('payment_terms', '').strip() or None
+        
+        if supplier_name:
+            if update_supplier(supplier_id, supplier_name, contact_person, email, phone, address, city, state, country, 
+                             county, zipcode, latitude, longitude, website, tax_id, payment_terms):
+                flash('Supplier updated successfully!', 'success')
+            else:
+                flash('Failed to update supplier.', 'error')
+        else:
+            flash('Please fill in the supplier name.', 'error')
+        return redirect(url_for('suppliers_route'))
+    
+    low_stock_items = get_low_stock_items()
+    return render_template('edit_supplier.html', supplier=supplier, low_stock_count=len(low_stock_items))
+
+@app.route('/suppliers/delete/<int:supplier_id>')
+def delete_supplier_route(supplier_id):
+    """Delete a supplier."""
+    if delete_supplier(supplier_id):
+        flash('Supplier deleted successfully!', 'success')
+    else:
+        flash('Failed to delete supplier. Make sure no items are using this supplier.', 'error')
+    return redirect(url_for('suppliers_route'))
 
 
 if __name__ == '__main__':

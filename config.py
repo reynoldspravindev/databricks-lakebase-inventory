@@ -41,7 +41,8 @@ class Config:
             'PORT': ['app', 'port'],
             'DEBUG': ['app', 'debug'],
             'POSTGRES_CATEGORY_TABLE': ['database', 'category_table'],
-            'POSTGRES_WAREHOUSE_TABLE': ['database', 'warehouse_table']
+            'POSTGRES_WAREHOUSE_TABLE': ['database', 'warehouse_table'],
+            'POSTGRES_SUPPLIER_TABLE': ['database', 'supplier_table']
         }
         
         for env_var, config_path in env_mappings.items():
