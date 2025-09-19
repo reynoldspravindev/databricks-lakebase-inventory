@@ -1,21 +1,42 @@
 {% extends "base.html" %}
 
-{% block title %}Equipment Inventory - Dashboard{% endblock %}
+{% block title %}Inventory Manager - Dashboard{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-boxes"></i> Equipment Inventory</h1>
+            <h1><i class="fas fa-boxes"></i> Inventory Manager</h1>
             <div>
                 <a href="{{ url_for('add_item_route') }}" class="btn btn-success">
                     <i class="fas fa-plus"></i> Add New Item
                 </a>
+                <button class="btn btn-primary ms-2" id="optimizeInventoryBtn" disabled 
+                        title="AI-powered inventory optimization (coming soon)">
+                    <i class="fas fa-robot"></i> Optimize Inventory
+                </button>
                 {% if low_stock_count > 0 %}
                     <a href="{{ url_for('low_stock_route') }}" class="btn btn-warning ms-2">
                         <i class="fas fa-exclamation-triangle"></i> Low Stock ({{ low_stock_count }})
                     </a>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- Warehouse Selector -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <label for="warehouseFilter" class="form-label"><strong>Select Warehouse:</strong></label>
+                        <select id="warehouseFilter" class="form-select form-select-lg">
+                            <option value="">All Warehouses</option>
+                            {% for warehouse in warehouses %}
+                                <option value="{{ warehouse[0] }}">{{ warehouse[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -53,11 +74,11 @@
                                 <tr>
                                     <th>Item Name</th>
                                     <th>Category</th>
+                                    <th>Warehouse</th>
                                     <th>Quantity</th>
                                     <th>Unit Price</th>
                                     <th>Total Value</th>
                                     <th>Supplier</th>
-                                    <th>Location</th>
                                     <th>Status</th>
                                     <th>Date Added</th>
                                     <th>Last Updated</th>
@@ -66,30 +87,31 @@
                             </thead>
                             <tbody>
                                 {% for item in items %}
-                                    {% set is_low_stock = item[8] and item[4] <= item[8] %}
-                                    {% set is_out_of_stock = item[4] == 0 %}
+                                    {% set is_low_stock = item[9] and item[6] <= item[9] %}
+                                    {% set is_out_of_stock = item[6] == 0 %}
                                     <tr class="{% if is_out_of_stock %}out-of-stock{% elif is_low_stock %}low-stock{% endif %}" 
                                         data-category="{{ item[3] }}" 
-                                        data-stock-status="{% if is_out_of_stock %}out{% elif is_low_stock %}low{% else %}normal{% endif %}">
+                                        data-stock-status="{% if is_out_of_stock %}out{% elif is_low_stock %}low{% else %}normal{% endif %}"
+                                        data-warehouse="{{ item[13] }}">
                                         <td>
                                             <strong>{{ item[1] }}</strong>
                                             {% if item[2] %}
                                                 <br><small class="text-muted">{{ item[2][:50] }}{% if item[2]|length > 50 %}...{% endif %}</small>
                                             {% endif %}
                                         </td>
-                                        <td>{{ item[3] }}</td>
+                                        <td>{{ item[3] or '-' }}</td>
+                                        <td>{{ item[4] or '-' }}</td>
                                         <td>
                                             <span class="badge {% if is_out_of_stock %}bg-danger{% elif is_low_stock %}bg-warning{% else %}bg-success{% endif %}">
-                                                {{ item[4] }}
+                                                {{ item[6] }}
                                             </span>
-                                            {% if item[8] %}
-                                                <br><small class="text-muted">Min: {{ item[8] }}</small>
+                                            {% if item[9] %}
+                                                <br><small class="text-muted">Min: {{ item[9] }}</small>
                                             {% endif %}
                                         </td>
-                                        <td>${{ "%.2f"|format(item[5]) }}</td>
-                                        <td><strong>${{ "%.2f"|format(item[4] * item[5]) }}</strong></td>
-                                        <td>{{ item[6] or '-' }}</td>
-                                        <td>{{ item[7] or '-' }}</td>
+                                        <td>${{ "%.2f"|format(item[7]) }}</td>
+                                        <td><strong>${{ "%.2f"|format(item[6] * item[7]) }}</strong></td>
+                                        <td>{{ item[5] or '-' }}</td>
                                         <td>
                                             {% if is_out_of_stock %}
                                                 <span class="badge bg-danger">Out of Stock</span>
@@ -102,10 +124,10 @@
                                         <td class="timestamp-cell">
                                             <small class="text-muted" 
                                                    data-bs-toggle="tooltip" 
-                                                   title="{% if item[9] %}Added on {{ item[9].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Date unknown{% endif %}">
-                                                {% if item[9] %}
-                                                    {{ item[9].strftime('%m/%d/%Y') }}<br>
-                                                    <span class="text-muted">{{ item[9].strftime('%H:%M') }}</span>
+                                                   title="{% if item[10] %}Added on {{ item[10].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Date unknown{% endif %}">
+                                                {% if item[10] %}
+                                                    {{ item[10].strftime('%m/%d/%Y') }}<br>
+                                                    <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
                                                 {% else %}
                                                     <span class="text-muted">Unknown</span>
                                                 {% endif %}
@@ -114,14 +136,14 @@
                                         <td class="timestamp-cell">
                                             <small class="text-muted"
                                                    data-bs-toggle="tooltip" 
-                                                   title="{% if item[10] %}Last modified on {{ item[10].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Never modified{% endif %}">
-                                                {% if item[10] %}
-                                                    {% if item[9] and item[10].date() == item[9].date() %}
+                                                   title="{% if item[11] %}Last modified on {{ item[11].strftime('%B %d, %Y at %I:%M %p') }}{% else %}Never modified{% endif %}">
+                                                {% if item[11] %}
+                                                    {% if item[10] and item[11].date() == item[10].date() %}
                                                         <span class="text-success">Same Day</span><br>
-                                                        <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
+                                                        <span class="text-muted">{{ item[11].strftime('%H:%M') }}</span>
                                                     {% else %}
-                                                        {{ item[10].strftime('%m/%d/%Y') }}<br>
-                                                        <span class="text-muted">{{ item[10].strftime('%H:%M') }}</span>
+                                                        {{ item[11].strftime('%m/%d/%Y') }}<br>
+                                                        <span class="text-muted">{{ item[11].strftime('%H:%M') }}</span>
                                                     {% endif %}
                                                 {% else %}
                                                     <span class="text-muted">Never</span>
@@ -154,7 +176,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Total Items</h5>
-                                    <h3 class="text-primary">{{ items|length }}</h3>
+                                    <h3 class="text-primary" id="totalItemsCount">{{ items|length }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -162,7 +184,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Total Value</h5>
-                                    <h3 class="text-success">${{ "%.2f"|format(items|sum(attribute=4) * items|sum(attribute=5) if items else 0) }}</h3>
+                                    <h3 class="text-success" id="totalValueAmount">${{ total_value }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -170,7 +192,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Categories</h5>
-                                    <h3 class="text-info">{{ items|map(attribute=3)|unique|list|length if items else 0 }}</h3>
+                                    <h3 class="text-info" id="categoriesCount">{{ items|map(attribute=3)|unique|list|length if items else 0 }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -178,7 +200,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Low Stock</h5>
-                                    <h3 class="text-warning">{{ low_stock_count }}</h3>
+                                    <h3 class="text-warning" id="lowStockCount">{{ low_stock_count }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -195,10 +217,10 @@
                                                 <small class="text-muted">
                                                     <i class="fas fa-plus-circle text-success"></i> 
                                                     <strong>Newest Item:</strong><br>
-                                                    {% set newest_item = items|max(attribute=9) if items else None %}
+                                                    {% set newest_item = items|max(attribute=10) if items else None %}
                                                     {% if newest_item %}
                                                         {{ newest_item[1] }}<br>
-                                                        <span class="text-muted">{{ newest_item[9].strftime('%Y-%m-%d %H:%M') }}</span>
+                                                        <span class="text-muted">{{ newest_item[10].strftime('%Y-%m-%d %H:%M') }}</span>
                                                     {% else %}
                                                         No items found
                                                     {% endif %}
@@ -208,10 +230,10 @@
                                                 <small class="text-muted">
                                                     <i class="fas fa-edit text-primary"></i> 
                                                     <strong>Last Updated:</strong><br>
-                                                    {% set last_updated_item = items|max(attribute=10) if items else None %}
+                                                    {% set last_updated_item = items|max(attribute=11) if items else None %}
                                                     {% if last_updated_item %}
                                                         {{ last_updated_item[1] }}<br>
-                                                        <span class="text-muted">{{ last_updated_item[10].strftime('%Y-%m-%d %H:%M') }}</span>
+                                                        <span class="text-muted">{{ last_updated_item[11].strftime('%Y-%m-%d %H:%M') }}</span>
                                                     {% else %}
                                                         No updates yet
                                                     {% endif %}
@@ -234,8 +256,8 @@
                 {% else %}
                     <div class="text-center py-5">
                         <i class="fas fa-boxes fa-5x text-muted mb-3"></i>
-                        <h3 class="text-muted">No Equipment Found</h3>
-                        <p class="text-muted">Start by adding your first piece of equipment to the inventory.</p>
+                        <h3 class="text-muted">No Items Found</h3>
+                        <p class="text-muted">Start by adding your first item to the inventory.</p>
                         <a href="{{ url_for('add_item_route') }}" class="btn btn-success btn-lg">
                             <i class="fas fa-plus"></i> Add First Item
                         </a>
@@ -249,11 +271,32 @@
 
 {% block scripts %}
 <script>
+// Function to format numbers in millions/billions
+function formatCurrency(value) {
+    if (value >= 1000000000) {
+        return (value / 1000000000).toFixed(2) + 'B';
+    } else if (value >= 1000000) {
+        return (value / 1000000).toFixed(2) + 'M';
+    } else if (value >= 1000) {
+        return (value / 1000).toFixed(2) + 'K';
+    } else {
+        return value.toFixed(2);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const categoryFilter = document.getElementById('categoryFilter');
     const stockFilter = document.getElementById('stockFilter');
+    const warehouseFilter = document.getElementById('warehouseFilter');
     const table = document.getElementById('inventoryTable');
+    
+    // Format initial total value display
+    const totalValueElement = document.getElementById('totalValueAmount');
+    if (totalValueElement) {
+        const currentValue = parseFloat(totalValueElement.textContent.replace('$', '')) || 0;
+        totalValueElement.textContent = '$' + formatCurrency(currentValue);
+    }
     
     // Set current time
     const currentTimeElement = document.getElementById('currentTime');
@@ -292,29 +335,71 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchTerm = searchInput.value.toLowerCase();
         const selectedCategory = categoryFilter.value;
         const selectedStock = stockFilter.value;
+        const selectedWarehouse = warehouseFilter.value;
         const rows = table.querySelectorAll('tbody tr');
+        
+        let visibleRows = [];
+        let totalValue = 0;
+        let categories = new Set();
+        let lowStockCount = 0;
         
         rows.forEach(row => {
             const itemName = row.querySelector('td:first-child').textContent.toLowerCase();
             const category = row.dataset.category;
             const stockStatus = row.dataset.stockStatus;
+            const warehouse = row.dataset.warehouse;
             
             const matchesSearch = itemName.includes(searchTerm);
             const matchesCategory = !selectedCategory || category === selectedCategory;
             const matchesStock = !selectedStock || stockStatus === selectedStock;
+            const matchesWarehouse = !selectedWarehouse || warehouse === selectedWarehouse;
             
-            if (matchesSearch && matchesCategory && matchesStock) {
+            if (matchesSearch && matchesCategory && matchesStock && matchesWarehouse) {
                 row.style.display = '';
+                visibleRows.push(row);
+                
+                // Calculate statistics for visible rows
+                const quantity = parseInt(row.querySelector('td:nth-child(4)').textContent) || 0;
+                const unitPrice = parseFloat(row.querySelector('td:nth-child(5)').textContent.replace('$', '')) || 0;
+                totalValue += quantity * unitPrice;
+                
+                if (category) categories.add(category);
+                if (stockStatus === 'low' || stockStatus === 'out') lowStockCount++;
             } else {
                 row.style.display = 'none';
             }
         });
+        
+        // Update summary statistics
+        updateSummaryStatistics(visibleRows.length, totalValue, categories.size, lowStockCount);
+    }
+    
+    // Function to update summary statistics
+    function updateSummaryStatistics(itemCount, totalValue, categoryCount, lowStockCount) {
+        const totalItemsElement = document.getElementById('totalItemsCount');
+        const totalValueElement = document.getElementById('totalValueAmount');
+        const categoriesElement = document.getElementById('categoriesCount');
+        const lowStockElement = document.getElementById('lowStockCount');
+        
+        if (totalItemsElement) totalItemsElement.textContent = itemCount;
+        if (totalValueElement) totalValueElement.textContent = '$' + formatCurrency(totalValue);
+        if (categoriesElement) categoriesElement.textContent = categoryCount;
+        if (lowStockElement) lowStockElement.textContent = lowStockCount;
     }
     
     // Add event listeners
     searchInput.addEventListener('input', filterTable);
     categoryFilter.addEventListener('change', filterTable);
     stockFilter.addEventListener('change', filterTable);
+    warehouseFilter.addEventListener('change', filterTable);
+    
+    // Optimize Inventory button (disabled for now)
+    const optimizeBtn = document.getElementById('optimizeInventoryBtn');
+    if (optimizeBtn) {
+        optimizeBtn.addEventListener('click', function() {
+            alert('Inventory optimization feature is coming soon! This will use AI/ML models to optimize inventory across all warehouses based on demand forecasts.');
+        });
+    }
 });
 </script>
 {% endblock %} 
