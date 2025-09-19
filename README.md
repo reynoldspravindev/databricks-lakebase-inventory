@@ -29,12 +29,6 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 - **Row- and Column-Level Security**: Enforce granular permissions on inventory records via Unity Catalog, even within Lakebase tables.
 - **Auditability**: All user actions and data changes are logged for compliance and traceability.
 
-## Built for the Databricks Lakehouse Era
-
-This project exemplifies the next generation of data-driven applications, harnessing the Databricks Lakehouse, Lakebase (Managed Postgres), Unity Catalog, and secure app embedding to deliver actionable insights and operational excellence for inventory management.
-
-For a deep dive into the Databricks dashboard integration, Lakebase setup, and security architecture, see `DASHBOARD_INTEGRATION_SUMMARY.md` and `DASHBOARD_SETUP.md`.
-
 ## Quick Start
 
 ### Prerequisites
@@ -46,25 +40,8 @@ For a deep dive into the Databricks dashboard integration, Lakebase setup, and s
 - **Databricks dashboard** (Optional. For embedded analytics; see `DASHBOARD_SETUP.md`)
 - **Databricks Secret Scope** For the Flask key. 
 
-### For Local Development (Recommended):
-```bash
-# Activate your virtual environment
-source venv/bin/activate
 
-# Run the local version with CSV upload
-python app_local.py
-```
-
-### For Production (PostgreSQL):
-```bash
-# Set your environment variables first:
-# PGDATABASE, PGUSER, PGHOST, PGPORT, etc.
-
-# Run the PostgreSQL version with CSV upload
-python app.py
-```
-
-## 🚀 Databricks App Deployment
+## Databricks App Deployment
 
 ### Step 1: Set Up Lakebase Database Resource
 
@@ -108,9 +85,18 @@ When creating your Databricks App, you need to add your Lakebase database as an 
    - **Permission**: Select **"Can Read"**
    - **Secret Scope**: Select `app-secrets` from the dropdown
 
-### Step 3: Configure Your app.yaml
+  
+### Step 3(option 1): Clone the repo on the Databricks Workspace as a git folder. 
+   - This will be the value for <your app deployment workspace path for source code> below
 
-Create an `app.yaml` file with the following configuration:
+
+### Step 3(option 2): Clone the repo locally. 
+   - Deploy the app using Databricks CLI as mentioned in Step 5
+
+
+### Step 4: Configure Your app.yaml 
+
+Create an `app.yaml` file with the following configuration and place it the source code path (<your app deployment workspace path for source code>) of your Databricks App.
 
 ```yaml
 name: inventory-management-app
@@ -133,7 +119,7 @@ env:
   - name: PGAPPNAME
     value: "inventory_app"
   
-  # Schema and table configuration
+  # Schema and table configuration. When not passed defaults to "inventory_app" and "inventory_items" respy.
   - name: POSTGRES_SCHEMA
     value: "inventory_app"
   - name: POSTGRES_TABLE
@@ -159,27 +145,16 @@ env:
   - name: PORT
     value: "8080"
   
-  # Databricks configuration (optional - for dashboard integration)
+  # Databricks configuration (for dashboard integration)
   - name: DATABRICKS_HOST
     value: "https://your-workspace.cloud.databricks.com"
   - name: DASHBOARD_ID
-    value: "your-dashboard-uuid"  # Optional
-
-# Resources
-resources:
-  # Lakebase database resource
-  - name: databricks_postgres
-    key: databricks_postgres
-    permission: CAN_CONNECT
-  
-  # Secret scope for Flask key
-  - name: app-secrets
-    key: app-secrets
-    permission: CAN_READ
+    value: "your-dashboard-uuid"  
 ```
 
-### Step 4: Deploy Your App
+### Step 5: Deploy Your App. 
 
+Option 1: Applicable if option 2 of step 3 is chosen.
 ```bash
 # Using Databricks CLI
 # Optional Continuous Sync
@@ -192,7 +167,9 @@ databricks apps deploy <app name> --source-code-path <your app deployment worksp
 # Upload your code and app.yaml through the Apps interface
 ```
 
-### Step 5: Verify App Resources
+Option 2: If option 1 of step 3 is chosen, then just simply deploy the app from UI or via CLI.
+
+### Step 6: Verify App Resources
 
 After deployment, verify that your app has access to:
 
@@ -200,7 +177,7 @@ After deployment, verify that your app has access to:
 2. **Secret Access**: The app should be able to read the Flask secret key from the secret scope
 3. **Table Creation**: The app will automatically create the `inventory_app.inventory_items` table on first run
 
-## 📊 CSV Upload Features
+## CSV Upload Features
 
 - **Bulk Upload**: Add multiple items at once via CSV
 - **Data Validation**: Comprehensive validation with detailed error reporting
@@ -209,7 +186,7 @@ After deployment, verify that your app has access to:
 - **Error Handling**: Skip invalid rows, process valid ones
 - **File Size Limit**: 16MB maximum file size
 
-### 📋 CSV Format Requirements:
+### CSV Format Requirements:
 
 #### Required Columns:
 - `item_name` (max 100 characters)
@@ -292,6 +269,7 @@ data/
 ```
 
 ## 📄 Sample Data
+=======
 
 Use the included `sample_inventory.csv` for testing:
 - 10 different equipment items
@@ -299,15 +277,7 @@ Use the included `sample_inventory.csv` for testing:
 - Mix of high and low-value items
 - Some items with low stock alerts
 
-## 🔧 Switching Between Versions
-
-To change which app version you're using:
-
-1. **For YAML/Docker deployments**: Update your configuration to point to the desired Python file
-2. **For local development**: Simply run the appropriate Python file
-3. **All versions share the same templates**, so no additional setup needed
-
-## ⚠️ Important Notes
+## Important Notes
 
 - **CSV uploads only ADD new items** - they don't update or delete existing items
 - **Data validation is strict** - invalid rows are skipped with detailed error messages
@@ -315,7 +285,7 @@ To change which app version you're using:
 - **Templates are automatically generated** with the latest format requirements
 - **App Resources are required** for Databricks App deployment - ensure both database and secret scope resources are properly configured
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues:
 
