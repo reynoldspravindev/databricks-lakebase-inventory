@@ -83,6 +83,416 @@ def get_warehouse_table_name():
 def get_supplier_table_name():
     return os.getenv("POSTGRES_SUPPLIER_TABLE", "inventory_supplier")
 
+def get_demand_table_name():
+    return os.getenv("POSTGRES_DEMAND_TABLE", "inventory_demand_forecast")
+
+def execute_sql_script(script_path):
+    """Execute a SQL script file with comprehensive error handling."""
+    script_full_path = None
+    sql_text = ""
+    
+    try:
+        script_full_path = os.path.join(os.path.dirname(__file__), 'data', script_path)
+        print(f"🔍 Looking for SQL script: {script_full_path}")
+        
+        if not os.path.exists(script_full_path):
+            print(f"❌ SQL script not found: {script_full_path}")
+            return False
+        
+        print(f"✅ Found SQL script: {script_path}")
+        
+        # Read and process the SQL file
+        with open(script_full_path, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+            print(f"📖 Read {len(sql_content)} characters from {script_path}")
+            
+            # Remove comment lines but keep the SQL structure
+            lines = sql_content.split('\n')
+            cleaned_lines = []
+            for i, line in enumerate(lines, 1):
+                line = line.strip()
+                # Skip comment lines and empty lines
+                if line and not line.startswith('--'):
+                    cleaned_lines.append(line)
+                elif line.startswith('--'):
+                    print(f"📝 Skipping comment on line {i}: {line[:50]}...")
+            
+            # Join lines back together
+            sql_text = '\n'.join(cleaned_lines)
+            print(f"🧹 Cleaned SQL: {len(sql_text)} characters after removing comments")
+            
+            if not sql_text.strip():
+                print(f"⚠️  No SQL content found in {script_path} after cleaning")
+                return False
+        
+        # Execute the SQL with detailed error handling
+        print(f"🔄 Executing SQL script: {script_path}")
+        
+        # Debug mode: show SQL content if enabled
+        debug_sql = os.getenv("DEBUG_SQL", "false").lower() in ("true", "1", "yes")
+        if debug_sql:
+            print(f"🔍 DEBUG - SQL content preview:")
+            print(f"📝 {sql_text[:500]}...")
+            if len(sql_text) > 500:
+                print(f"📝 ... (truncated, total length: {len(sql_text)} characters)")
+        
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                try:
+                    # Execute the SQL
+                    print(f"🚀 Starting SQL execution...")
+                    cur.execute(sql_text)
+                    
+                    # Get execution result info
+                    if hasattr(cur, 'rowcount'):
+                        rows_affected = cur.rowcount
+                        print(f"📊 Rows affected: {rows_affected}")
+                    
+                    # Commit the transaction
+                    conn.commit()
+                    print(f"✅ Transaction committed successfully")
+                    
+                    print(f"✅ SQL script {script_path} executed successfully")
+                    return True
+                    
+                except Exception as sql_error:
+                    print(f"❌ SQL execution error in {script_path}:")
+                    print(f"   Error type: {type(sql_error).__name__}")
+                    print(f"   Error message: {str(sql_error)}")
+                    
+                    # Try to get more detailed error info
+                    if hasattr(sql_error, 'pgcode'):
+                        print(f"   PostgreSQL error code: {sql_error.pgcode}")
+                    if hasattr(sql_error, 'pgerror'):
+                        print(f"   PostgreSQL error details: {sql_error.pgerror}")
+                    
+                    # Rollback the transaction
+                    try:
+                        conn.rollback()
+                        print(f"🔄 Transaction rolled back")
+                    except Exception as rollback_error:
+                        print(f"⚠️  Error during rollback: {rollback_error}")
+                    
+                    # Show problematic SQL section
+                    print(f"📝 Problematic SQL section:")
+                    print(f"📝 {sql_text[:300]}...")
+                    if len(sql_text) > 300:
+                        print(f"📝 ... (showing first 300 characters)")
+                    
+                    return False
+                    
+    except FileNotFoundError as e:
+        print(f"❌ File not found error: {e}")
+        print(f"   Expected path: {script_full_path}")
+        return False
+        
+    except PermissionError as e:
+        print(f"❌ Permission error reading {script_path}: {e}")
+        return False
+        
+    except UnicodeDecodeError as e:
+        print(f"❌ Encoding error reading {script_path}: {e}")
+        print(f"   File might not be UTF-8 encoded")
+        return False
+        
+    except Exception as e:
+        print(f"❌ Unexpected error executing {script_path}: {e}")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Script path: {script_full_path}")
+        if sql_text:
+            print(f"   SQL content length: {len(sql_text)} characters")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def load_sample_data():
+    """Load sample data from SQL scripts in the data folder."""
+    # Check if sample data loading is enabled
+    load_sample = os.getenv("LOAD_SAMPLE_DATA", "true").lower() in ("true", "1", "yes")
+    if not load_sample:
+        print("📊 Sample data loading is disabled (LOAD_SAMPLE_DATA=false)")
+        return True
+    
+    print("📊 Loading sample data from SQL scripts...")
+    print("=" * 60)
+    
+    # Define the order of script execution
+    scripts = [
+        'category_data.sql',
+        'warehouse_data.sql', 
+        'supplier_data.sql',
+        'inventory_items_data.sql'
+    ]
+    
+    success_count = 0
+    failed_scripts = []
+    
+    for i, script in enumerate(scripts, 1):
+        print(f"\n📋 [{i}/{len(scripts)}] Processing {script}")
+        print("-" * 40)
+        
+        try:
+            if execute_sql_script(script):
+                print(f"✅ {script} executed successfully")
+                success_count += 1
+            else:
+                print(f"❌ Failed to execute {script}")
+                failed_scripts.append(script)
+        except Exception as e:
+            print(f"❌ Unexpected error processing {script}: {e}")
+            failed_scripts.append(script)
+            import traceback
+            traceback.print_exc()
+    
+    print("\n" + "=" * 60)
+    print(f"📊 Sample data loading completed: {success_count}/{len(scripts)} scripts executed successfully")
+    
+    if failed_scripts:
+        print(f"❌ Failed scripts: {', '.join(failed_scripts)}")
+        print("🔍 Check the error messages above for details")
+    
+    # Verify data was loaded correctly
+    if success_count == len(scripts):
+        print("\n🔍 Verifying loaded data...")
+        verify_sample_data()
+        return True
+    else:
+        print(f"\n⚠️  Some scripts failed. Only {success_count}/{len(scripts)} scripts executed successfully.")
+        if success_count > 0:
+            print("🔍 Verifying partially loaded data...")
+            verify_sample_data()
+        return False
+
+def verify_sample_data():
+    """Verify that sample data was loaded correctly."""
+    try:
+        print("🔍 Verifying sample data...")
+        print("-" * 40)
+        
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema_name = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                category_table_name = get_category_table_name()
+                warehouse_table_name = get_warehouse_table_name()
+                supplier_table_name = get_supplier_table_name()
+                
+                print(f"🔍 Using schema: {schema_name}")
+                print(f"🔍 Checking tables: {category_table_name}, {warehouse_table_name}, {supplier_table_name}, {table_name}")
+                
+                # Check category count
+                try:
+                    cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                        sql.Identifier(schema_name), sql.Identifier(category_table_name)
+                    ))
+                    category_count = cur.fetchone()[0]
+                    print(f"📊 Categories loaded: {category_count}")
+                except Exception as e:
+                    print(f"❌ Error checking categories: {e}")
+                    category_count = 0
+                
+                # Check warehouse count
+                try:
+                    cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                        sql.Identifier(schema_name), sql.Identifier(warehouse_table_name)
+                    ))
+                    warehouse_count = cur.fetchone()[0]
+                    print(f"📊 Warehouses loaded: {warehouse_count}")
+                except Exception as e:
+                    print(f"❌ Error checking warehouses: {e}")
+                    warehouse_count = 0
+                
+                # Check supplier count
+                try:
+                    cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                        sql.Identifier(schema_name), sql.Identifier(supplier_table_name)
+                    ))
+                    supplier_count = cur.fetchone()[0]
+                    print(f"📊 Suppliers loaded: {supplier_count}")
+                except Exception as e:
+                    print(f"❌ Error checking suppliers: {e}")
+                    supplier_count = 0
+                
+                # Check inventory items count
+                try:
+                    cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                        sql.Identifier(schema_name), sql.Identifier(table_name)
+                    ))
+                    items_count = cur.fetchone()[0]
+                    print(f"📊 Inventory items loaded: {items_count}")
+                except Exception as e:
+                    print(f"❌ Error checking inventory items: {e}")
+                    items_count = 0
+                
+                # Show some sample data
+                if items_count > 0:
+                    try:
+                        cur.execute(sql.SQL("SELECT item_name, category_name, warehouse_name, supplier_name, quantity, unit_price FROM {}.{} i LEFT JOIN {}.{} c ON i.category_id = c.category_id LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id LEFT JOIN {}.{} s ON i.supplier_id = s.supplier_id LIMIT 5").format(
+                            sql.Identifier(schema_name), sql.Identifier(table_name),
+                            sql.Identifier(schema_name), sql.Identifier(category_table_name),
+                            sql.Identifier(schema_name), sql.Identifier(warehouse_table_name),
+                            sql.Identifier(schema_name), sql.Identifier(supplier_table_name)
+                        ))
+                        sample_items = cur.fetchall()
+                        print("📋 Sample inventory items:")
+                        for item in sample_items:
+                            print(f"   - {item[0]} ({item[1]}) - Qty: {item[4]}, Price: ${item[5]}")
+                    except Exception as e:
+                        print(f"❌ Error fetching sample items: {e}")
+                        print("🔍 Trying to fetch items without joins...")
+                        try:
+                            cur.execute(sql.SQL("SELECT item_name, quantity, unit_price FROM {}.{} LIMIT 5").format(
+                                sql.Identifier(schema_name), sql.Identifier(table_name)
+                            ))
+                            sample_items = cur.fetchall()
+                            print("📋 Sample inventory items (basic info only):")
+                            for item in sample_items:
+                                print(f"   - {item[0]} - Qty: {item[1]}, Price: ${item[2]}")
+                        except Exception as e2:
+                            print(f"❌ Error fetching basic item info: {e2}")
+                
+                # Summary
+                print("\n📊 Data Loading Summary:")
+                print(f"   Categories: {category_count}")
+                print(f"   Warehouses: {warehouse_count}")
+                print(f"   Suppliers: {supplier_count}")
+                print(f"   Inventory Items: {items_count}")
+                
+                if items_count == 0:
+                    print("⚠️  No inventory items found. This might indicate an issue with the data loading.")
+                elif category_count == 0 or warehouse_count == 0 or supplier_count == 0:
+                    print("⚠️  Some reference tables are empty. This might cause issues with inventory items.")
+                
+    except Exception as e:
+        print(f"❌ Error verifying sample data: {e}")
+        import traceback
+        traceback.print_exc()
+
+def check_tables_need_data():
+    """Check if tables are empty and need sample data."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema_name = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                category_table_name = get_category_table_name()
+                warehouse_table_name = get_warehouse_table_name()
+                supplier_table_name = get_supplier_table_name()
+                
+                # Check if any of the main tables are empty
+                tables_to_check = [
+                    (table_name, "inventory_items"),
+                    (category_table_name, "inventory_category"),
+                    (warehouse_table_name, "inventory_warehouse"),
+                    (supplier_table_name, "inventory_supplier")
+                ]
+                
+                empty_tables = []
+                for table, display_name in tables_to_check:
+                    try:
+                        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                            sql.Identifier(schema_name), 
+                            sql.Identifier(table)
+                        ))
+                        count = cur.fetchone()[0]
+                        if count == 0:
+                            empty_tables.append(display_name)
+                    except Exception as e:
+                        # Table might not exist, consider it empty
+                        empty_tables.append(display_name)
+                
+                return len(empty_tables) > 0, empty_tables
+                
+    except Exception as e:
+        print(f"❌ Error checking table data: {e}")
+        return True, ["unknown"]  # Assume need data if we can't check
+
+def reset_all_data():
+    """Reset all data in inventory tables and reset identity sequences."""
+    try:
+        schema_name = get_schema_name()
+        table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+        category_table_name = get_category_table_name()
+        warehouse_table_name = get_warehouse_table_name()
+        supplier_table_name = get_supplier_table_name()
+        demand_table_name = get_demand_table_name()
+        
+        print("🔄 Starting complete data reset...")
+        
+        # Step 1: Clear all data in separate transactions to avoid deadlocks
+        tables_to_clear = [
+            (table_name, "inventory_items"),
+            (supplier_table_name, "inventory_supplier"), 
+            (warehouse_table_name, "inventory_warehouse"),
+            (category_table_name, "inventory_category")
+        ]
+        
+        for table, display_name in tables_to_clear:
+            try:
+                print(f"🗑️  Clearing data from {display_name}...")
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql.SQL("DELETE FROM {}.{}").format(
+                            sql.Identifier(schema_name), 
+                            sql.Identifier(table)
+                        ))
+                        conn.commit()
+                        print(f"✅ Cleared {display_name}")
+                        
+                # Small delay to prevent deadlocks
+                import time
+                time.sleep(0.1)
+                        
+            except Exception as e:
+                print(f"❌ Could not clear {display_name}: {e}")
+                return False
+        
+        # Step 2: Reset sequences in separate transactions to avoid deadlocks
+        print("🔄 Resetting identity sequences...")
+        sequence_mapping = {
+            table_name: f"{table_name}_id_seq",
+            category_table_name: f"{category_table_name}_category_id_seq", 
+            warehouse_table_name: f"{warehouse_table_name}_warehouse_id_seq",
+            supplier_table_name: f"{supplier_table_name}_supplier_id_seq"
+        }
+        
+        for table, display_name in tables_to_clear:
+            if table in sequence_mapping:
+                sequence_name = sequence_mapping[table]
+                try:
+                    print(f"🔄 Resetting sequence for {display_name}...")
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(sql.SQL("ALTER SEQUENCE {}.{} RESTART WITH 1").format(
+                                sql.Identifier(schema_name),
+                                sql.Identifier(sequence_name)
+                            ))
+                            conn.commit()
+                            print(f"✅ Reset sequence {sequence_name} to start from 1")
+                            
+                    # Small delay to prevent deadlocks
+                    import time
+                    time.sleep(0.1)
+                            
+                except Exception as e:
+                    print(f"❌ Could not reset sequence for {display_name}: {e}")
+                    return False
+        
+        print("✅ All data cleared and sequences reset successfully")
+        
+        # Step 3: Load sample data after reset
+        print("📊 Loading sample data after reset...")
+        if load_sample_data():
+            print("✅ Sample data loaded successfully")
+            return True
+        else:
+            print("⚠️  Some sample data failed to load")
+            return False
+                
+    except Exception as e:
+        print(f"❌ Error during data reset: {e}")
+        return False
+
 def init_database():
     """Initialize database schema and tables."""
     try:
@@ -93,10 +503,36 @@ def init_database():
                 category_table_name = get_category_table_name()
                 warehouse_table_name = get_warehouse_table_name()
                 supplier_table_name = get_supplier_table_name()
+                demand_table_name = get_demand_table_name()
+                
+                # Check if force data reset is enabled
+                force_reset = os.getenv("FORCE_DATA_RESET", "false").lower() in ("true", "1", "yes")
                 
                 print(f"🔧 Creating schema '{schema_name}' if it doesn't exist...")
                 cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
                 print(f"✅ Schema '{schema_name}' ready")
+                
+                # Force data reset if enabled
+                if force_reset:
+                    print("🔄 FORCE_DATA_RESET is enabled - calling reset function...")
+                    conn.commit()  # Commit schema creation first
+                    
+                    # Call the separate reset function to avoid deadlocks
+                    if reset_all_data():
+                        print("✅ Data reset completed successfully")
+                    else:
+                        print("❌ Data reset failed")
+                        return False
+                
+                # Check if tables need sample data (for first-time setup)
+                needs_data, empty_tables = check_tables_need_data()
+                if needs_data and not force_reset:
+                    print(f"📊 Detected empty tables: {', '.join(empty_tables)}")
+                    print("📊 Loading sample data for first-time setup...")
+                    if load_sample_data():
+                        print("✅ Sample data loaded successfully")
+                    else:
+                        print("⚠️  Some sample data failed to load")
                 
                 # Create category table first
                 print(f"🔧 Creating table '{schema_name}.{category_table_name}' if it doesn't exist...")
@@ -1074,14 +1510,15 @@ def get_demand_forecast_suggestion(warehouse_id, category_id, current_quantity, 
                 schema = get_schema_name()
                 
                 # Get detailed forecast data for the next 30 days (daily granularity)
+                demand_table = get_demand_table_name()
                 cur.execute(sql.SQL("""
                     SELECT forecast_date, forecasted_items
-                    FROM {}.inventory_demand_forecast 
+                    FROM {}.{} 
                     WHERE warehouse_id = %s AND category_id = %s 
                     AND forecast_date >= CURRENT_DATE 
                     AND forecast_date <= CURRENT_DATE + INTERVAL '30 days'
                     ORDER BY forecast_date
-                """).format(sql.Identifier(schema)), (warehouse_id, category_id))
+                """).format(sql.Identifier(schema), sql.Identifier(demand_table)), (warehouse_id, category_id))
                 
                 forecast_data = cur.fetchall()
                 
@@ -1205,7 +1642,12 @@ def index():
     items = get_inventory_items()
     low_stock_items = get_low_stock_items()
     warehouses = get_warehouses()
-    return render_template('index.html', items=items, low_stock_count=len(low_stock_items), warehouses=warehouses)
+    
+    # Calculate total inventory value
+    total_value = sum(item[6] * item[7] for item in items) if items else 0
+    
+    return render_template('index.html', items=items, low_stock_count=len(low_stock_items), 
+                         warehouses=warehouses, total_value=total_value)
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_item_route():
@@ -1449,6 +1891,27 @@ def api_demand_forecast():
     
     suggestion = get_demand_forecast_suggestion(warehouse_id, category_id, current_quantity, minimum_stock, new_quantity)
     return jsonify(suggestion)
+
+@app.route('/api/reset-data', methods=['POST'])
+def api_reset_data():
+    """API endpoint to reset all data and identity sequences."""
+    try:
+        success = reset_all_data()
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'All data has been reset successfully'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to reset data'
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error resetting data: {str(e)}'
+        }), 500
 
 # Category management routes
 @app.route('/categories')

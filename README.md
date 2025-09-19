@@ -138,6 +138,22 @@ env:
     value: "inventory_app"
   - name: POSTGRES_TABLE
     value: "inventory_items"
+  - name: POSTGRES_CATEGORY_TABLE
+    value: "inventory_category"
+  - name: POSTGRES_WAREHOUSE_TABLE
+    value: "inventory_warehouse"
+  - name: POSTGRES_SUPPLIER_TABLE
+    value: "inventory_supplier"
+  - name: POSTGRES_DEMAND_TABLE
+    value: "inventory_demand_forecast"
+  
+  # Data management
+  - name: FORCE_DATA_RESET
+    value: "false"  # Set to "true" to delete all data and reset identity values on startup
+  - name: LOAD_SAMPLE_DATA
+    value: "true"   # Set to "false" to disable automatic sample data loading
+  - name: DEBUG_SQL
+    value: "false"  # Set to "true" to show SQL content being executed (for debugging)
   
   # App configuration
   - name: PORT
@@ -206,6 +222,74 @@ After deployment, verify that your app has access to:
 - `supplier` (max 100 characters)
 - `location` (max 100 characters)
 - `minimum_stock` (integer ≥ 0)
+
+## 🔄 Data Management
+
+### Environment Variables for Data Control
+
+The application supports several environment variables for flexible data management:
+
+- **`FORCE_DATA_RESET`**: Set to `"true"` to delete all data and reset identity sequences on startup (excludes demand forecast table)
+- **`LOAD_SAMPLE_DATA`**: Set to `"false"` to disable automatic sample data loading (default: `"true"`)
+- **`DEBUG_SQL`**: Set to `"true"` to show SQL content being executed for debugging (default: `"false"`)
+- **`POSTGRES_CATEGORY_TABLE`**: Customize category table name (default: `inventory_category`)
+- **`POSTGRES_WAREHOUSE_TABLE`**: Customize warehouse table name (default: `inventory_warehouse`)
+- **`POSTGRES_SUPPLIER_TABLE`**: Customize supplier table name (default: `inventory_supplier`)
+- **`POSTGRES_DEMAND_TABLE`**: Customize demand forecast table name (default: `inventory_demand_forecast`)
+
+### Data Reset Options
+
+1. **Automatic Reset on Startup**: Set `FORCE_DATA_RESET=true` to clear all data when the app starts
+2. **Manual Reset via API**: Send POST request to `/api/reset-data` to reset data programmatically
+3. **Standalone Reset Function**: Call `reset_all_data()` function in your code
+
+**Note**: 
+- All reset operations preserve the demand forecast table to maintain historical forecast data and analytics continuity
+- After any reset operation, sample data is automatically loaded (unless `LOAD_SAMPLE_DATA=false`)
+- On first-time setup, sample data is automatically loaded if tables are empty
+
+### Sample Data Scripts
+
+The repository includes SQL scripts for populating tables with realistic data in the `data/` folder:
+
+- **`data/category_data.sql`**: 40+ realistic product categories across various industries
+- **`data/warehouse_data.sql`**: 26 strategically located warehouses across North America
+- **`data/supplier_data.sql`**: 30+ suppliers with geographic coordinates for map visualization
+- **`data/inventory_items_data.sql`**: 100+ realistic retail inventory items across all categories
+
+### Data Folder Structure
+
+```
+data/
+├── category_data.sql          # Product categories (TPCDS-aligned)
+├── warehouse_data.sql         # Warehouse locations with coordinates
+├── supplier_data.sql          # Supplier information with geographic data
+├── inventory_items_data.sql   # Complete inventory items dataset
+└── load_all_data.sql          # Master script to load all data
+```
+
+### Loading Sample Data
+
+#### Option 1: Load All Data at Once (Recommended)
+```sql
+-- Load all sample data in the correct order
+\i data/load_all_data.sql
+```
+
+#### Option 2: Load Data Individually
+```sql
+-- 1. Load categories first (no dependencies)
+\i data/category_data.sql
+
+-- 2. Load warehouses (no dependencies)
+\i data/warehouse_data.sql
+
+-- 3. Load suppliers (no dependencies)
+\i data/supplier_data.sql
+
+-- 4. Load inventory items (depends on categories, warehouses, suppliers)
+\i data/inventory_items_data.sql
+```
 
 ## 📄 Sample Data
 

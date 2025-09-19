@@ -184,7 +184,7 @@
                             <div class="card text-center">
                                 <div class="card-body">
                                     <h5 class="card-title">Total Value</h5>
-                                    <h3 class="text-success" id="totalValueAmount">${{ "%.2f"|format(items|sum(attribute=6) * items|sum(attribute=7) if items else 0) }}</h3>
+                                    <h3 class="text-success" id="totalValueAmount">${{ total_value }}</h3>
                                 </div>
                             </div>
                         </div>
@@ -271,12 +271,32 @@
 
 {% block scripts %}
 <script>
+// Function to format numbers in millions/billions
+function formatCurrency(value) {
+    if (value >= 1000000000) {
+        return (value / 1000000000).toFixed(2) + 'B';
+    } else if (value >= 1000000) {
+        return (value / 1000000).toFixed(2) + 'M';
+    } else if (value >= 1000) {
+        return (value / 1000).toFixed(2) + 'K';
+    } else {
+        return value.toFixed(2);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const categoryFilter = document.getElementById('categoryFilter');
     const stockFilter = document.getElementById('stockFilter');
     const warehouseFilter = document.getElementById('warehouseFilter');
     const table = document.getElementById('inventoryTable');
+    
+    // Format initial total value display
+    const totalValueElement = document.getElementById('totalValueAmount');
+    if (totalValueElement) {
+        const currentValue = parseFloat(totalValueElement.textContent.replace('$', '')) || 0;
+        totalValueElement.textContent = '$' + formatCurrency(currentValue);
+    }
     
     // Set current time
     const currentTimeElement = document.getElementById('currentTime');
@@ -362,7 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const lowStockElement = document.getElementById('lowStockCount');
         
         if (totalItemsElement) totalItemsElement.textContent = itemCount;
-        if (totalValueElement) totalValueElement.textContent = '$' + totalValue.toFixed(2);
+        if (totalValueElement) totalValueElement.textContent = '$' + formatCurrency(totalValue);
         if (categoriesElement) categoriesElement.textContent = categoryCount;
         if (lowStockElement) lowStockElement.textContent = lowStockCount;
     }
