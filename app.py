@@ -524,16 +524,6 @@ def init_database():
                         print("❌ Data reset failed")
                         return False
                 
-                # Check if tables need sample data (for first-time setup)
-                needs_data, empty_tables = check_tables_need_data()
-                if needs_data and not force_reset:
-                    print(f"📊 Detected empty tables: {', '.join(empty_tables)}")
-                    print("📊 Loading sample data for first-time setup...")
-                    if load_sample_data():
-                        print("✅ Sample data loaded successfully")
-                    else:
-                        print("⚠️  Some sample data failed to load")
-                
                 # Create category table first
                 print(f"🔧 Creating table '{schema_name}.{category_table_name}' if it doesn't exist...")
                 create_category_table_sql = sql.SQL("""
@@ -585,7 +575,7 @@ def init_database():
                 create_supplier_table_sql = sql.SQL("""
                     CREATE TABLE IF NOT EXISTS {}.{} (
                         supplier_id serial4 NOT NULL,
-                        supplier_name varchar(100) NOT NULL,
+                        supplier_name varchar(100) NOT NULL UNIQUE,
                         contact_person varchar(100) NULL,
                         email varchar(100) NULL,
                         phone varchar(20) NULL,
@@ -746,6 +736,19 @@ def init_database():
                 
                 conn.commit()
                 print("✅ Schema and tables creation committed")
+                
+                # Check if tables need sample data (for first-time setup)
+                # This is done AFTER tables are created
+                if not force_reset:  # Skip if we just did a reset
+                    needs_data, empty_tables = check_tables_need_data()
+                    if needs_data:
+                        print(f"📊 Detected empty tables: {', '.join(empty_tables)}")
+                        print("📊 Loading sample data for first-time setup...")
+                        if load_sample_data():
+                            print("✅ Sample data loaded successfully")
+                        else:
+                            print("⚠️  Some sample data failed to load")
+                
                 return True
                 
     except Exception as e:
