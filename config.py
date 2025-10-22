@@ -37,6 +37,7 @@ class Config:
         env_mappings = {
             'DATABRICKS_HOST': ['databricks', 'host'],
             'DASHBOARD_ID': ['databricks', 'dashboard_id'],
+            'MODEL_ENDPOINT_NAME': ['databricks', 'model_endpoint_name'],
             'SECRET_KEY': ['app', 'secret_key'],
             'PORT': ['app', 'port'],
             'DEBUG': ['app', 'debug'],
@@ -118,6 +119,24 @@ class Config:
         """Check if dashboard is configured."""
         return self.get_dashboard_embed_url() is not None
     
+    def get_model_endpoint_name(self) -> Optional[str]:
+        """Get the model serving endpoint name."""
+        return self.get('databricks.model_endpoint_name')
+    
+    def get_model_endpoint_url(self) -> Optional[str]:
+        """Get the model serving endpoint URL."""
+        host = self.get('databricks.host')
+        endpoint_name = self.get_model_endpoint_name()
+        
+        if not host or not endpoint_name:
+            return None
+        
+        base_url = host.rstrip('/')
+        return f"{base_url}/serving-endpoints/{endpoint_name}/invocations"
+    
+    def is_model_endpoint_configured(self) -> bool:
+        """Check if model serving endpoint is configured."""
+        return self.get_model_endpoint_url() is not None
     
     def print_config_summary(self):
         """Print a summary of the current configuration."""
@@ -125,6 +144,8 @@ class Config:
         print(f"  Dashboard configured: {self.is_dashboard_configured()}")
         print(f"  Databricks host: {self.get('databricks.host', 'Not set')}")
         print(f"  Dashboard ID: {self.get('databricks.dashboard_id', 'Not set')}")
+        print(f"  Model endpoint configured: {self.is_model_endpoint_configured()}")
+        print(f"  Model endpoint name: {self.get_model_endpoint_name() or 'Not set'}")
 
 # Global config instance
 config = Config()

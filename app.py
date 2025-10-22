@@ -4,6 +4,8 @@ import os
 import time
 import csv
 import io
+import requests
+import pandas as pd
 from datetime import datetime
 from databricks import sdk
 from psycopg import sql
@@ -1505,95 +1507,149 @@ def get_low_stock_items():
         print(f"Get low stock items error: {e}")
         return []
 
-def get_demand_forecast_suggestion(warehouse_id, category_id, current_quantity, minimum_stock, new_quantity=0):
-    """Get suggested quantity based on demand forecast with smart inventory analysis."""
+def get_demand_forecast_suggestion(warehouse_id, category_id, item_name, current_quantity, minimum_stock, new_quantity=0):
+    """Get suggested quantity based on demand forecast from model serving endpoint with smart inventory analysis."""
     try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                schema = get_schema_name()
-                
-                # Get detailed forecast data for the next 30 days (daily granularity)
-                demand_table = get_demand_table_name()
-                cur.execute(sql.SQL("""
-                    SELECT forecast_date, forecasted_items
-                    FROM {}.{} 
-                    WHERE warehouse_id = %s AND category_id = %s 
-                    AND forecast_date >= CURRENT_DATE 
-                    AND forecast_date <= CURRENT_DATE + INTERVAL '30 days'
-                    ORDER BY forecast_date
-                """).format(sql.Identifier(schema), sql.Identifier(demand_table)), (warehouse_id, category_id))
-                
-                forecast_data = cur.fetchall()
-                
-                if forecast_data:
-                    # Calculate total forecast and analyze daily requirements
-                    total_forecast = sum(float(row[1]) for row in forecast_data)
-                    daily_forecasts = [(row[0], float(row[1])) for row in forecast_data]
-                    
-                    # Calculate total available inventory (current + new quantity being added)
-                    total_available = current_quantity + new_quantity
-                    
-                    # Calculate safety stock (minimum_stock or 10% of total forecast, whichever is higher)
-                    safety_stock = max(
-                        minimum_stock if minimum_stock else 0,
-                        max(1, int(total_forecast * 0.1))
-                    )
-                    
-                    # Calculate recommended total inventory (forecast + safety stock)
-                    recommended_total = int(total_forecast) + safety_stock
-                    
-                    # Check if current inventory + new quantity meets demand
-                    if total_available >= recommended_total:
-                        # Current inventory is sufficient, suggest minimal increase or no change
-                        if total_available >= recommended_total + safety_stock:
-                            # Very well stocked, suggest no increase
-                            suggested_quantity = new_quantity
-                            reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} is sufficient for 30-day forecast ({int(total_forecast)}) + safety stock ({safety_stock}). No additional increase needed."
-                        else:
-                            # Adequate but could use small buffer
-                            suggested_quantity = new_quantity + max(1, int(safety_stock * 0.2))
-                            reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} meets forecast ({int(total_forecast)}) but adding small buffer for safety."
-                    else:
-                        # Insufficient inventory, calculate needed increase
-                        needed_increase = recommended_total - total_available
-                        suggested_quantity = new_quantity + needed_increase
-                        reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} insufficient for 30-day forecast ({int(total_forecast)}) + safety stock ({safety_stock}). Suggest adding {needed_increase} more items."
-                    
-                    return {
-                        'suggested_quantity': suggested_quantity,
-                        'forecast_30_days': int(total_forecast),
-                        'safety_stock': safety_stock,
-                        'current_total_available': total_available,
-                        'recommended_total': recommended_total,
-                        'reasoning': reasoning
-                    }
-                else:
-                    # No forecast data available, use minimum stock logic
-                    if minimum_stock and current_quantity + new_quantity < minimum_stock:
-                        needed_increase = minimum_stock - (current_quantity + new_quantity)
-                        suggested_quantity = new_quantity + needed_increase
-                        reasoning = f"No forecast data available. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} below minimum stock ({minimum_stock}). Suggest adding {needed_increase} more items."
-                    else:
-                        suggested_quantity = new_quantity
-                        reasoning = f"No forecast data available. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} meets minimum stock requirement ({minimum_stock if minimum_stock else 'not set'})."
-                    
-                    return {
-                        'suggested_quantity': suggested_quantity,
-                        'forecast_30_days': 0,
-                        'safety_stock': minimum_stock if minimum_stock else 1,
-                        'current_total_available': current_quantity + new_quantity,
-                        'recommended_total': minimum_stock if minimum_stock else current_quantity + new_quantity,
-                        'reasoning': reasoning
-                    }
+        # Check if model endpoint is configured
+        if not config.is_model_endpoint_configured():
+            print("Model endpoint not configured, using minimum stock logic")
+            # Fallback to minimum stock logic
+            if minimum_stock and current_quantity + new_quantity < minimum_stock:
+                needed_increase = minimum_stock - (current_quantity + new_quantity)
+                suggested_quantity = new_quantity + needed_increase
+                reasoning = f"Model endpoint not configured. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} below minimum stock ({minimum_stock}). Suggest adding {needed_increase} more items."
+            else:
+                suggested_quantity = new_quantity
+                reasoning = f"Model endpoint not configured. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} meets minimum stock requirement ({minimum_stock if minimum_stock else 'not set'})."
+            
+            return {
+                'suggested_quantity': suggested_quantity,
+                'forecast_90_days': 0,
+                'safety_stock': minimum_stock if minimum_stock else 1,
+                'current_total_available': current_quantity + new_quantity,
+                'recommended_total': minimum_stock if minimum_stock else current_quantity + new_quantity,
+                'reasoning': reasoning
+            }
+        
+        # Prepare batch data for next 3 months
+        current_month = datetime.now().month
+        months = [((current_month + i - 1) % 12) + 1 for i in range(3)]
+        
+        # Create batch data with all 3 months
+        batch_data = pd.DataFrame([
+            {
+                "warehouse_id": float(warehouse_id),
+                "category_id": float(category_id),
+                "item_name": item_name,
+                "month": float(m)
+            }
+            for m in months
+        ])
+        
+        # Prepare the request payload
+        payload = {
+            "dataframe_split": {
+                "columns": batch_data.columns.tolist(),
+                "data": batch_data.values.tolist()
+            }
+        }
+        
+        # Get the endpoint URL and prepare headers
+        endpoint_url = config.get_model_endpoint_url()
+        
+        # Refresh OAuth token and prepare headers
+        if not refresh_oauth_token():
+            raise Exception("Failed to refresh OAuth token")
+        
+        headers = {
+            "Authorization": f"Bearer {postgres_password}",
+            "Content-Type": "application/json"
+        }
+        
+        # Call the serving endpoint
+        print(f"Calling model endpoint: {endpoint_url}")
+        response = requests.post(
+            endpoint_url,
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Model endpoint returned status {response.status_code}: {response.text}")
+        
+        # Parse the response
+        predictions_data = response.json()
+        
+        # The response should have predictions for all 3 months
+        # Sum the predictions to get total forecast for next 3 months
+        if 'predictions' in predictions_data:
+            predictions = predictions_data['predictions']
+            total_forecast = sum(float(p) for p in predictions)
+        else:
+            raise Exception(f"Unexpected response format: {predictions_data}")
+        
+        print(f"Model prediction for next 3 months: {total_forecast}")
+        
+        # Calculate total available inventory (current + new quantity being added)
+        total_available = current_quantity + new_quantity
+        
+        # Calculate safety stock (minimum_stock or 10% of total forecast, whichever is higher)
+        safety_stock = max(
+            minimum_stock if minimum_stock else 0,
+            max(1, int(total_forecast * 0.1))
+        )
+        
+        # Calculate recommended total inventory (forecast + safety stock)
+        recommended_total = int(total_forecast) + safety_stock
+        
+        # Check if current inventory + new quantity meets demand
+        if total_available >= recommended_total:
+            # Current inventory is sufficient, suggest minimal increase or no change
+            if total_available >= recommended_total + safety_stock:
+                # Very well stocked, suggest no increase
+                suggested_quantity = new_quantity
+                reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} is sufficient for 90-day AI forecast ({int(total_forecast)}) + safety stock ({safety_stock}). No additional increase needed."
+            else:
+                # Adequate but could use small buffer
+                suggested_quantity = new_quantity + max(1, int(safety_stock * 0.2))
+                reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} meets AI forecast ({int(total_forecast)}) but adding small buffer for safety."
+        else:
+            # Insufficient inventory, calculate needed increase
+            needed_increase = recommended_total - total_available
+            suggested_quantity = new_quantity + needed_increase
+            reasoning = f"Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {total_available} insufficient for 90-day AI forecast ({int(total_forecast)}) + safety stock ({safety_stock}). Suggest adding {needed_increase} more items."
+        
+        return {
+            'suggested_quantity': suggested_quantity,
+            'forecast_90_days': int(total_forecast),
+            'safety_stock': safety_stock,
+            'current_total_available': total_available,
+            'recommended_total': recommended_total,
+            'reasoning': reasoning
+        }
+        
     except Exception as e:
         print(f"Get demand forecast error: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Fallback to minimum stock logic on error
+        if minimum_stock and current_quantity + new_quantity < minimum_stock:
+            needed_increase = minimum_stock - (current_quantity + new_quantity)
+            suggested_quantity = new_quantity + needed_increase
+            reasoning = f"Error retrieving AI forecast: {str(e)}. Current inventory ({current_quantity}) + new quantity ({new_quantity}) = {current_quantity + new_quantity} below minimum stock ({minimum_stock}). Suggest adding {needed_increase} more items."
+        else:
+            suggested_quantity = new_quantity + 1
+            reasoning = f"Error retrieving AI forecast: {str(e)}. Suggesting small increase."
+        
         return {
-            'suggested_quantity': new_quantity + 1,
-            'forecast_30_days': 0,
+            'suggested_quantity': suggested_quantity,
+            'forecast_90_days': 0,
             'safety_stock': minimum_stock if minimum_stock else 1,
             'current_total_available': current_quantity + new_quantity,
             'recommended_total': current_quantity + new_quantity + 1,
-            'reasoning': "Error retrieving forecast data. Suggesting small increase."
+            'reasoning': reasoning
         }
 
 def get_dashboard_embed_url():
@@ -1885,6 +1941,7 @@ def api_demand_forecast():
     """API endpoint to get demand forecast suggestion."""
     warehouse_id = request.args.get('warehouse_id', type=int)
     category_id = request.args.get('category_id', type=int)
+    item_name = request.args.get('item_name', type=str)
     current_quantity = request.args.get('current_quantity', 0, type=int)
     minimum_stock = request.args.get('minimum_stock', type=int)
     new_quantity = request.args.get('new_quantity', 0, type=int)
@@ -1892,7 +1949,10 @@ def api_demand_forecast():
     if not warehouse_id or not category_id:
         return jsonify({'error': 'warehouse_id and category_id are required'}), 400
     
-    suggestion = get_demand_forecast_suggestion(warehouse_id, category_id, current_quantity, minimum_stock, new_quantity)
+    if not item_name:
+        return jsonify({'error': 'item_name is required'}), 400
+    
+    suggestion = get_demand_forecast_suggestion(warehouse_id, category_id, item_name, current_quantity, minimum_stock, new_quantity)
     return jsonify(suggestion)
 
 @app.route('/api/reset-data', methods=['POST'])

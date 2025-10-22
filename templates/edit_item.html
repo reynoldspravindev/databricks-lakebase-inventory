@@ -256,6 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function getDemandForecast() {
         const warehouseId = document.getElementById('warehouse_id').value;
         const categoryId = document.getElementById('category_id').value;
+        const itemName = document.getElementById('item_name').value.trim();
         const currentQuantity = {{ item[4] }}; // Current quantity from database
         const newQuantity = parseInt(quantityInput.value) || 0;
         const minimumStock = parseInt(document.getElementById('minimum_stock').value) || null;
@@ -265,11 +266,17 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        if (!itemName) {
+            alert('Please enter an item name before getting forecast suggestion.');
+            return;
+        }
+
         getForecastBtn.disabled = true;
         getForecastBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         const minStockParam = minimumStock ? minimumStock : '';
-        fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`)
+        const itemNameParam = encodeURIComponent(itemName);
+        fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&item_name=${itemNameParam}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
