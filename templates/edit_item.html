@@ -53,7 +53,7 @@
                             <label for="quantity" class="form-label">Quantity <span class="text-danger">*</span></label>
                             <div class="input-group">
                                 <input type="number" class="form-control" id="quantity" name="quantity" required 
-                                       min="0" value="{{ item[4] }}" placeholder="0">
+                                       min="0" value="{{ item[6] }}" placeholder="0">
                                 <button class="btn btn-outline-info" type="button" id="getForecastBtn" 
                                         title="Get AI-powered quantity suggestion">
                                     <i class="fas fa-magic"></i>
@@ -74,14 +74,14 @@
                         <div class="col-md-4 mb-3">
                             <label for="unit_price" class="form-label">Unit Price ($) <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" id="unit_price" name="unit_price" required 
-                                   min="0" step="0.01" value="{{ item[5] }}" placeholder="0.00">
+                                   min="0" step="0.01" value="{{ item[7] }}" placeholder="0.00">
                         </div>
 
                         <!-- Minimum Stock -->
                         <div class="col-md-4 mb-3">
                             <label for="minimum_stock" class="form-label">Minimum Stock Level</label>
                             <input type="number" class="form-control" id="minimum_stock" name="minimum_stock" 
-                                   min="0" value="{{ item[8] or '' }}" placeholder="Optional">
+                                   min="0" value="{{ item[9] or '' }}" placeholder="Optional">
                             <div class="form-text">Alert when stock falls below this level</div>
                         </div>
                     </div>
@@ -130,12 +130,12 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="alert alert-secondary">
-                                    <strong>Current Total Value: ${{ "%.2f"|format(item[4] * item[5]) }}</strong>
+                                    <strong>Current Total Value: ${{ "%.2f"|format(item[6] * item[7]) }}</strong>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="alert alert-info">
-                                    <strong>New Total Value: $<span id="totalValue">{{ "%.2f"|format(item[4] * item[5]) }}</span></strong>
+                                    <strong>New Total Value: $<span id="totalValue">{{ "%.2f"|format(item[6] * item[7]) }}</span></strong>
                                 </div>
                             </div>
                         </div>
@@ -153,8 +153,8 @@
                                             <div>
                                                 <strong>Date Added</strong><br>
                                                 <span class="text-muted">
-                                                    {% if item[9] %}
-                                                        {{ item[9].strftime('%B %d, %Y at %I:%M %p') }}
+                                                    {% if item[10] %}
+                                                        {{ item[10].strftime('%B %d, %Y at %I:%M %p') }}
                                                     {% else %}
                                                         Unknown
                                                     {% endif %}
@@ -168,10 +168,10 @@
                                             <div>
                                                 <strong>Last Updated</strong><br>
                                                 <span class="text-muted">
-                                                    {% if item[10] %}
-                                                        {{ item[10].strftime('%B %d, %Y at %I:%M %p') }}
-                                                        {% if item[9] and item[10] %}
-                                                            {% set time_diff = item[10] - item[9] %}
+                                                    {% if item[11] %}
+                                                        {{ item[11].strftime('%B %d, %Y at %I:%M %p') }}
+                                                        {% if item[10] and item[11] %}
+                                                            {% set time_diff = item[11] - item[10] %}
                                                             {% if time_diff.days == 0 and time_diff.seconds < 3600 %}
                                                                 <small class="badge bg-info">Recently added</small>
                                                             {% elif time_diff.days == 0 %}
@@ -192,12 +192,12 @@
                                         </div>
                                     </div>
                                 </div>
-                                {% if item[9] and item[10] %}
+                                {% if item[10] and item[11] %}
                                     <hr>
                                     <small class="text-muted">
                                         <i class="fas fa-info-circle"></i>
                                         This item was created 
-                                        {% set created_days = (item[10] - item[9]).days %}
+                                        {% set created_days = (item[11] - item[10]).days %}
                                         {% if created_days == 0 %}
                                             today and last modified today.
                                         {% elif created_days == 1 %}
@@ -257,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const warehouseId = document.getElementById('warehouse_id').value;
         const categoryId = document.getElementById('category_id').value;
         const itemName = document.getElementById('item_name').value.trim();
-        const currentQuantity = {{ item[4] }}; // Current quantity from database
+        const currentQuantity = {{ item[6] }}; // Current quantity from database
         const newQuantity = parseInt(quantityInput.value) || 0;
         const minimumStock = parseInt(document.getElementById('minimum_stock').value) || null;
 
