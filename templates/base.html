@@ -4,43 +4,416 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Inventory Manager{% endblock %}</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap & Font Awesome -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
     <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --card-gradient: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+
         body {
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
+
+        /* Glassmorphism Cards */
         .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Modern Navbar */
+        .navbar {
+            background: rgba(26, 32, 44, 0.95) !important;
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+        }
+
         .navbar-brand {
-            font-weight: bold;
+            font-weight: 800;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, #667eea, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        .low-stock {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
+
+        /* Modern Buttons */
+        .btn {
+            border-radius: 12px;
+            font-weight: 600;
+            padding: 0.6rem 1.5rem;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
         }
-        .out-of-stock {
-            background-color: #f8d7da;
-            border-left: 4px solid #dc3545;
+
+        .btn-success {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
         }
-        .table th {
-            background-color: #6c757d;
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #5568d3, #653a8e);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #d67be5, #e04a5f);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(240, 147, 251, 0.4);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffd89b, #19547b);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: linear-gradient(135deg, #ffc371, #0d3554);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 193, 7, 0.4);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f5576c, #c23a4b);
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #e04a5f, #ad3342);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 87, 108, 0.4);
+        }
+
+        .btn-outline-info, .btn-outline-primary, .btn-outline-secondary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
         }
-        .btn-outline-secondary:hover {
-            color: #fff;
+
+        .btn-outline-info:hover, .btn-outline-primary:hover, .btn-outline-secondary:hover {
+            background: linear-gradient(135deg, #5568d3, #653a8e);
+            color: white;
+            transform: scale(1.05);
         }
+
+        /* Ripple Effect */
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            transform: scale(0);
+            animation: ripple-animation 0.6s ease-out;
+            pointer-events: none;
+        }
+
+        @keyframes ripple-animation {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+
+        /* Modern Tables */
+        .table {
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .table th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        .table tbody tr {
+            transition: all 0.3s ease;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .table tbody tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+            transform: scale(1.01);
+        }
+
         .table td small {
             font-size: 0.75rem;
         }
+
         .table td[data-bs-toggle="tooltip"] {
             cursor: help;
         }
+
         .timestamp-cell {
             min-width: 90px;
+        }
+
+        /* Status Badges */
+        .badge {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        /* Form Controls */
+        .form-control, .form-select {
+            border-radius: 12px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            padding: 0.75rem 1rem;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        /* Low Stock Styling */
+        .low-stock {
+            background: linear-gradient(90deg, rgba(255, 193, 7, 0.1), transparent);
+            border-left: 4px solid #ffc107;
+            animation: pulse-warning 2s infinite;
+        }
+
+        .out-of-stock {
+            background: linear-gradient(90deg, rgba(220, 53, 69, 0.1), transparent);
+            border-left: 4px solid #dc3545;
+            animation: pulse-danger 2s infinite;
+        }
+
+        @keyframes pulse-warning {
+            0%, 100% { border-left-color: #ffc107; }
+            50% { border-left-color: #ff9800; }
+        }
+
+        @keyframes pulse-danger {
+            0%, 100% { border-left-color: #dc3545; }
+            50% { border-left-color: #c82333; }
+        }
+
+        /* AI Forecast Button */
+        #getForecastBtn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            transition: all 0.3s ease;
+        }
+
+        #getForecastBtn:hover {
+            background: linear-gradient(135deg, #5568d3, #653a8e);
+            transform: scale(1.05);
+            color: white;
+        }
+
+        /* Alert Boxes */
+        .alert {
+            border-radius: 16px;
+            border: none;
+            backdrop-filter: blur(10px);
+        }
+
+        .alert-info {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
+            border-left: 4px solid #667eea;
+        }
+
+        .alert-success {
+            background: linear-gradient(135deg, rgba(40, 167, 69, 0.15), rgba(25, 135, 84, 0.15));
+            border-left: 4px solid #28a745;
+        }
+
+        .alert-danger {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.15), rgba(200, 35, 51, 0.15));
+            border-left: 4px solid #dc3545;
+        }
+
+        .alert-warning {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.15), rgba(255, 152, 0, 0.15));
+            border-left: 4px solid #ffc107;
+        }
+
+        /* Dropdown Menu */
+        .dropdown-menu {
+            border-radius: 16px;
+            border: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.98);
+        }
+
+        .dropdown-item {
+            border-radius: 8px;
+            margin: 0.25rem 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-item:hover {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            transform: translateX(5px);
+        }
+
+        /* Loading Animation */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .fa-spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        /* Smooth Page Transitions */
+        .container {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5568d3, #653a8e);
+        }
+
+        /* Statistics Cards */
+        .stat-card {
+            border: none;
+            background: rgba(255, 255, 255, 0.95);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        .stat-icon.bg-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .stat-icon.bg-success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+
+        .stat-icon.bg-warning {
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+        }
+
+        .stat-icon.bg-info {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+        }
+
+        .stat-card h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Nav Link Active State */
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        /* Card Header */
+        .card-header {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+            border-radius: 20px 20px 0 0 !important;
+        }
+
+        /* Input Group Buttons */
+        .input-group .btn {
+            border-radius: 0 12px 12px 0;
+        }
+
+        .input-group .form-control {
+            border-radius: 12px 0 0 12px;
         }
     </style>
 </head>
@@ -120,11 +493,46 @@
     </div>
 
     <!-- Main Content -->
-    <div class="container mt-4">
+    <div class="container mt-4 mb-5">
         {% block content %}{% endblock %}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Add ripple effect to buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.btn').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    let ripple = document.createElement('span');
+                    ripple.classList.add('ripple');
+                    this.appendChild(ripple);
+                    
+                    let x = e.clientX - e.target.getBoundingClientRect().left;
+                    let y = e.clientY - e.target.getBoundingClientRect().top;
+                    
+                    ripple.style.left = x + 'px';
+                    ripple.style.top = y + 'px';
+                    
+                    setTimeout(() => {
+                        ripple.remove();
+                    }, 600);
+                });
+            });
+
+            // Add smooth scroll
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                });
+            });
+        });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
-</html> 
+</html>
