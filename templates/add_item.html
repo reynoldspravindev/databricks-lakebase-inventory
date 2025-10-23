@@ -170,7 +170,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const warehouseId = document.getElementById('warehouse_id').value;
         const categoryId = document.getElementById('category_id').value;
         const itemName = document.getElementById('item_name').value.trim();
-        const currentQuantity = 0; // For new items, current quantity is always 0
         const newQuantity = parseInt(quantityInput.value) || 0;
         const minimumStock = parseInt(document.getElementById('minimum_stock').value) || null;
 
@@ -187,9 +186,30 @@ document.addEventListener('DOMContentLoaded', function() {
         getForecastBtn.disabled = true;
         getForecastBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        const minStockParam = minimumStock ? minimumStock : '';
-        const itemNameParam = encodeURIComponent(itemName);
-        fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&item_name=${itemNameParam}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`)
+        // First, check if this item already exists in the selected warehouse/category
+        fetch(`/api/items`)
+            .then(response => response.json())
+            .then(items => {
+                // Look for existing item with same name, warehouse, and category
+                const existingItem = items.find(item => 
+                    item.item_name.toLowerCase() === itemName.toLowerCase() &&
+                    item.warehouse_id === parseInt(warehouseId) &&
+                    item.category_id === parseInt(categoryId)
+                );
+
+                // Use existing quantity if item exists, otherwise 0 for new items
+                const currentQuantity = existingItem ? existingItem.quantity : 0;
+
+                // Show info message if item already exists
+                if (existingItem) {
+                    console.log(`Found existing item: ${existingItem.item_name} with quantity ${existingItem.quantity}`);
+                }
+
+                // Now make the forecast call with the correct current quantity
+                const minStockParam = minimumStock ? minimumStock : '';
+                const itemNameParam = encodeURIComponent(itemName);
+                return fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&item_name=${itemNameParam}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`);
+            })
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
