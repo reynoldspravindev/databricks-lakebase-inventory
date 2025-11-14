@@ -689,52 +689,52 @@ def init_database():
                     cur.execute(create_table_sql)
                     print(f"✅ Table '{schema_name}.{table_name}' ready")
                 
-                # Insert default categories if they don't exist
-                print("🔧 Inserting default categories...")
-                default_categories = [
-                    "Home", "Shoes", "Sports", "Children", "Men",
-                    "Music", "Books", "Jewelry", "Women", "Electronics"
-                ]
+                # # Insert default categories if they don't exist
+                # print("🔧 Inserting default categories...")
+                # default_categories = [
+                #     "Home", "Shoes", "Sports", "Children", "Men",
+                #     "Music", "Books", "Jewelry", "Women", "Electronics"
+                # ]
                 
-                for category in default_categories:
-                    cur.execute(sql.SQL("""
-                        INSERT INTO {}.{} (category_name) 
-                        VALUES (%s) 
-                        ON CONFLICT (category_name) DO NOTHING
-                    """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)), (category,))
+                # for category in default_categories:
+                #     cur.execute(sql.SQL("""
+                #         INSERT INTO {}.{} (category_name) 
+                #         VALUES (%s) 
+                #         ON CONFLICT (category_name) DO NOTHING
+                #     """).format(sql.Identifier(schema_name), sql.Identifier(category_table_name)), (category,))
                 
-                print("✅ Default categories inserted")
+                # print("✅ Default categories inserted")
                 
-                # Insert default warehouse if none exists
-                print("🔧 Inserting default warehouse...")
-                cur.execute(sql.SQL("""
-                    INSERT INTO {}.{} (warehouse_name, city, state, country) 
-                    SELECT 'Main Warehouse', 'Unknown', 'Unknown', 'Unknown'
-                    WHERE NOT EXISTS (SELECT 1 FROM {}.{})
-                """).format(
-                    sql.Identifier(schema_name), 
-                    sql.Identifier(warehouse_table_name),
-                    sql.Identifier(schema_name),
-                    sql.Identifier(warehouse_table_name)
-                ))
+                # # Insert default warehouse if none exists
+                # print("🔧 Inserting default warehouse...")
+                # cur.execute(sql.SQL("""
+                #     INSERT INTO {}.{} (warehouse_name, city, state, country) 
+                #     SELECT 'Main Warehouse', 'Unknown', 'Unknown', 'Unknown'
+                #     WHERE NOT EXISTS (SELECT 1 FROM {}.{})
+                # """).format(
+                #     sql.Identifier(schema_name), 
+                #     sql.Identifier(warehouse_table_name),
+                #     sql.Identifier(schema_name),
+                #     sql.Identifier(warehouse_table_name)
+                # ))
                 
-                print("✅ Default warehouse inserted")
+                # print("✅ Default warehouse inserted")
                 
-                # Insert default suppliers if they don't exist
-                print("🔧 Inserting default suppliers...")
-                default_suppliers = [
-                    "Tech Supply Co.", "Office Solutions Inc.", "Industrial Equipment Ltd.", 
-                    "Safety First Supplies", "Global Logistics Corp.", "Quality Materials Inc."
-                ]
+                # # Insert default suppliers if they don't exist
+                # print("🔧 Inserting default suppliers...")
+                # default_suppliers = [
+                #     "Tech Supply Co.", "Office Solutions Inc.", "Industrial Equipment Ltd.", 
+                #     "Safety First Supplies", "Global Logistics Corp.", "Quality Materials Inc."
+                # ]
                 
-                for supplier in default_suppliers:
-                    cur.execute(sql.SQL("""
-                        INSERT INTO {}.{} (supplier_name) 
-                        VALUES (%s) 
-                        ON CONFLICT (supplier_name) DO NOTHING
-                    """).format(sql.Identifier(schema_name), sql.Identifier(supplier_table_name)), (supplier,))
+                # for supplier in default_suppliers:
+                #     cur.execute(sql.SQL("""
+                #         INSERT INTO {}.{} (supplier_name) 
+                #         VALUES (%s) 
+                #         ON CONFLICT (supplier_name) DO NOTHING
+                #     """).format(sql.Identifier(schema_name), sql.Identifier(supplier_table_name)), (supplier,))
                 
-                print("✅ Default suppliers inserted")
+                # print("✅ Default suppliers inserted")
                 
                 conn.commit()
                 print("✅ Schema and tables creation committed")
