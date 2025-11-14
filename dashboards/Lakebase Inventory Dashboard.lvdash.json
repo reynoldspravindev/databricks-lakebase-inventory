@@ -602,97 +602,6 @@
         },
         {
           "widget": {
-            "name": "demand_forecast_chart",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "demand_forecast_dataset",
-                  "fields": [
-                    {
-                      "name": "forecast_date",
-                      "expression": "`forecast_date`"
-                    },
-                    {
-                      "name": "sum(forecasted_items)",
-                      "expression": "SUM(`forecasted_items`)"
-                    },
-                    {
-                      "name": "sum(actual_items)",
-                      "expression": "SUM(`actual_items`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "line",
-              "encodings": {
-                "x": {
-                  "fieldName": "forecast_date",
-                  "scale": {
-                    "type": "temporal"
-                  },
-                  "displayName": "Date"
-                },
-                "y": {
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "fields": [
-                    {
-                      "fieldName": "sum(forecasted_items)",
-                      "displayName": "Forecasted"
-                    },
-                    {
-                      "fieldName": "sum(actual_items)",
-                      "displayName": "Actual"
-                    }
-                  ]
-                }
-              },
-              "frame": {
-                "title": "Demand Forecast vs Actual",
-                "showTitle": true,
-                "description": "Comparison of forecasted vs actual demand for inventory items",
-                "showDescription": true
-              },
-              "mark": {
-                "colors": [
-                  {
-                    "themeColorType": "visualizationColors",
-                    "position": 2
-                  },
-                  {
-                    "themeColorType": "visualizationColors",
-                    "position": 3
-                  },
-                  "#45B7D1",
-                  "#96CEB4",
-                  "#FFEAA7",
-                  {
-                    "themeColorType": "visualizationColors",
-                    "position": 6
-                  },
-                  {
-                    "themeColorType": "visualizationColors",
-                    "position": 7
-                  }
-                ]
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 6,
-            "width": 3,
-            "height": 6
-          }
-        },
-        {
-          "widget": {
             "name": "566fc24e",
             "queries": [
               {
@@ -739,9 +648,9 @@
             }
           },
           "position": {
-            "x": 3,
+            "x": 0,
             "y": 6,
-            "width": 3,
+            "width": 6,
             "height": 6
           }
         },
@@ -2261,6 +2170,7 @@
         "#C23B22"
       ],
       "widgetHeaderAlignment": "LEFT"
-    }
+    },
+    "applyModeEnabled": false
   }
 }
