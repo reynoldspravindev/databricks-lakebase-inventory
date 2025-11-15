@@ -22,160 +22,85 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 
 - **Modern User Experience**: Enjoy a responsive, intuitive web interface with bulk CSV upload, real-time validation, and analytics at your fingertips. The app supports template downloads, progress tracking, and detailed error feedback for seamless data onboarding.
 
+- **AI-Powered Demand Forecasting**: Leverage Databricks Model Serving with XGBoost models to predict inventory needs for the next 90 days. The system intelligently recommends optimal stock levels based on warehouse location, product category, and historical sales patterns, with automatic safety stock calculations and fallback logic for continuous operation.
+
+## Technology Stack
+
+- **Backend**: Python 3.9+ with Flask web framework
+- **Database**: Databricks Lakebase (Managed PostgreSQL)
+- **Database Driver**: psycopg3 with connection pooling
+- **SDK**: Databricks SDK for Python
+- **AI/ML**: Databricks Model Serving with XGBoost
+- **Data Processing**: pandas for data manipulation
+- **Frontend**: HTML5, CSS3, JavaScript with responsive design
+- **Configuration**: YAML-based configuration with environment variable override
+- **Authentication**: OAuth 2.0 with automatic token refresh
+- **Analytics**: Embedded Databricks AI/BI Dashboards
+
 ## Security & Compliance
 
 - **Unity Catalog**: Centralized governance for all inventory data, with audit trails and access policies spanning Lakebase and analytical data.
-- **OAuth & Token Management**: Secure authentication flows for dashboard embedding and API access.
+- **OAuth & Token Management**: Secure authentication flows for dashboard embedding and API access with automatic token refresh.
 - **Row- and Column-Level Security**: Enforce granular permissions on inventory records via Unity Catalog, even within Lakebase tables.
 - **Auditability**: All user actions and data changes are logged for compliance and traceability.
+- **Secure Configuration**: Sensitive credentials stored in Databricks Secret Scope, never in code or config files.
 
 ## Quick Start
 
 ### Prerequisites
+
+#### Required:
 - **Python 3.9+** (recommended: 3.10 or newer)
-- **Databricks Workspace** Unity Catalog enabled.
-- **Databricks Apps (Compute)** That has permissions granted to the Lakebase instance and to the secret scope.
-- **Lakebase (Managed Postgres) instance** 
-- **Required Python packages** (see `requirements.txt`)
-- **Databricks dashboard** (Optional. For embedded analytics; see `DASHBOARD_SETUP.md`)
-- **Databricks Secret Scope** For the Flask key. 
+- **Databricks Workspace** with Unity Catalog enabled
+- **Databricks Apps (Compute)** with permissions granted to:
+  - Lakebase instance (Can Connect)
+  - Secret scope (Can Read)
+- **Lakebase (Managed Postgres) instance** for transactional data storage
+- **Required Python packages** (see `requirements.txt`):
+  - Flask 2.3.0+
+  - psycopg 3.1.0+ (with binary and pool support)
+  - databricks-sdk 0.18.0+
+  - requests 2.31.0+
+  - pandas 2.0.0+
+  - PyYAML 6.0+
+- **Databricks Secret Scope** for storing the Flask secret key
+
+#### Optional:
+- **Databricks AI/BI Dashboard** for embedded analytics and visualizations
+- **Databricks Model Serving Endpoint** for AI-powered demand forecasting
+- **Databricks Notebooks** for model training and data generation (included in repository) 
 
 
-## Databricks App Deployment
 
-### Step 1: Set Up Lakebase Database Resource
+## Core Features
 
-When creating your Databricks App, you need to add your Lakebase database as an App resource:
+### Inventory Management
+- **Add/Edit/Delete Items**: Full CRUD operations for inventory items
+- **Category Management**: Organize inventory with custom categories
+- **Warehouse Management**: Track items across multiple warehouse locations with geographic coordinates
+- **Supplier Management**: Maintain supplier information including contact details and geographic data
+- **Low Stock Alerts**: Automatically identify items below minimum stock levels
+- **Bulk CSV Upload**: Add multiple items at once with comprehensive validation
+- **Search & Filter**: Quickly find items across your inventory
 
-1. **Create/Edit your Databricks App**
-2. **Add Database Resource:**
-   - Go to **App Resources** section
-   - Click **Add Resource**
-   - Select **Database** type
-   - **Resource Name**: Use your database name (e.g., `databricks_postgres`)
-   - **Resource Key**: Set this to the same as your database name (e.g., `databricks_postgres`)
-   - **Permission**: Select **"Can Connect"**
-   - **Database**: Select your Lakebase instance from the dropdown
+### AI-Powered Demand Forecasting
+- **Real-Time Predictions**: Get AI-powered demand forecasts for the next 90 days
+- **Smart Inventory Suggestions**: Receive intelligent recommendations on optimal stock levels
+- **Model Serving Integration**: Connects to Databricks Model Serving endpoints for predictions
+- **Safety Stock Calculation**: Automatically calculates safety stock (10% buffer) based on forecasts
+- **Fallback Logic**: Uses minimum stock thresholds when model endpoint is unavailable
+- **Interactive Feedback**: Real-time suggestions during item creation and editing
 
-### Step 2: Set Up Flask Secret Key
+### Dashboard & Analytics
+- **Embedded Dashboards**: View live Databricks AI/BI dashboards directly in the app
+- **Real-Time Metrics**: Monitor inventory value, stock levels, and trends
+- **Visual Analytics**: Interactive charts and graphs for better decision-making
 
-1. **Generate a secure Flask secret key:**
-   ```python
-   import secrets
-   print(secrets.token_hex(32))
-   # Example output: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6'
-   ```
-
-2. **Create Databricks Secret Scope:**
-   ```bash
-   # Using Databricks CLI
-   databricks secrets create-scope app-secrets
-   
-   # Add the Flask secret key
-   databricks secrets put-secret app-secrets SECRET_KEY
-   # When prompted, paste your generated secret key
-   ```
-
-3. **Add Secret Scope as App Resource:**
-   - Go to **App Resources** section
-   - Click **Add Resource**
-   - Select **Secret Scope** type
-   - **Resource Name**: `app-secrets`
-   - **Resource Key**: `app-secrets`
-   - **Permission**: Select **"Can Read"**
-   - **Secret Scope**: Select `app-secrets` from the dropdown
-
-  
-### Step 3(option 1): Clone the repo on the Databricks Workspace as a git folder. 
-   - This will be the value for <your app deployment workspace path for source code> below
-
-
-### Step 3(option 2): Clone the repo locally. 
-   - Deploy the app using Databricks CLI as mentioned in Step 5
-
-
-### Step 4: Configure Your app.yaml 
-
-Create an `app.yaml` file with the following configuration and place it the source code path (<your app deployment workspace path for source code>) of your Databricks App.
-
-```yaml
-name: inventory-management-app
-description: Databricks Lakebase Inventory Management System
-
-# Database configuration
-env:
-  - name: PGDATABASE
-    value: "your_database_name"
-  - name: PGUSER (only for local testing)
-    value: "your_username@domain.com"
-  - name: PGHOST (only for local testing)
-    value: "your-lakebase-host.database.azuredatabricks.net"
-  - name: PGPASSWORD (only for local testing)
-    value: "your PGUSER password or OAUTH token"
-  - name: PGPORT
-    value: "5432"
-  - name: PGSSLMODE
-    value: "require"
-  - name: PGAPPNAME
-    value: "inventory_app"
-  
-  # Schema and table configuration. When not passed defaults to "inventory_app" and "inventory_items" respy.
-  - name: POSTGRES_SCHEMA
-    value: "inventory_app"
-  - name: POSTGRES_TABLE
-    value: "inventory_items"
-  - name: POSTGRES_CATEGORY_TABLE
-    value: "inventory_category"
-  - name: POSTGRES_WAREHOUSE_TABLE
-    value: "inventory_warehouse"
-  - name: POSTGRES_SUPPLIER_TABLE
-    value: "inventory_supplier"
-  - name: POSTGRES_DEMAND_TABLE
-    value: "inventory_demand_forecast"
-  
-  # Data management
-  - name: FORCE_DATA_RESET
-    value: "false"  # Set to "true" to delete all data and reset identity values on startup
-  - name: LOAD_SAMPLE_DATA
-    value: "true"   # Set to "false" to disable automatic sample data loading
-  - name: DEBUG_SQL
-    value: "false"  # Set to "true" to show SQL content being executed (for debugging)
-  
-  # App configuration
-  - name: PORT
-    value: "8080"
-  
-  # Databricks configuration (for dashboard integration)
-  - name: DATABRICKS_HOST
-    value: "https://your-workspace.cloud.databricks.com"
-  - name: DASHBOARD_ID
-    value: "your-dashboard-uuid"  
-```
-
-### Step 5: Deploy Your App. 
-
-Option 1: Applicable if option 2 of step 3 is chosen.
-```bash
-# Using Databricks CLI
-# Optional Continuous Sync
-databricks sync --watch . <your app deployment workspace path for source code>
-
-# Deploy the app
-databricks apps deploy <app name> --source-code-path <your app deployment workspace path for source code>
-
-# Or using the Databricks UI
-# Upload your code and app.yaml through the Apps interface
-```
-
-Option 2: If option 1 of step 3 is chosen, then just simply deploy the app from UI or via CLI.
-
-### Step 6: Verify App Resources
-
-After deployment, verify that your app has access to:
-
-1. **Database Connection**: The app should be able to connect to your Lakebase instance
-2. **Secret Access**: The app should be able to read the Flask secret key from the secret scope
-3. **Table Creation**: The app will automatically create the `inventory_app.inventory_items` table on first run
+### Data Management
+- **Sample Data Loading**: Automatically populate with realistic sample data
+- **Data Reset API**: Programmatically reset data while preserving forecast history
+- **Foreign Table Sync**: Bi-directional sync between Lakebase and Unity Catalog
+- **Comprehensive SQL Scripts**: Pre-built scripts for categories, warehouses, suppliers, and items
 
 ## CSV Upload Features
 
@@ -190,17 +115,40 @@ After deployment, verify that your app has access to:
 
 #### Required Columns:
 - `item_name` (max 100 characters)
-- `category` (max 50 characters) 
+- `category_id` (integer, must exist in categories table) 
 - `quantity` (integer ≥ 0)
 - `unit_price` (decimal ≥ 0)
 
 #### Optional Columns:
 - `description`
-- `supplier` (max 100 characters)
-- `location` (max 100 characters)
+- `supplier_id` (integer, must exist in suppliers table)
+- `warehouse_id` (integer, must exist in warehouses table)
 - `minimum_stock` (integer ≥ 0)
 
-## 🔄 Data Management
+## API Endpoints
+
+The application provides RESTful API endpoints for programmatic access:
+
+- **`GET /api/items`**: Retrieve all inventory items as JSON
+- **`GET /api/token-status`**: Check OAuth token validity
+- **`GET /api/dashboard-config`**: Get dashboard configuration status
+- **`GET /api/demand-forecast`**: Get AI-powered demand forecast suggestions
+  - Query parameters: `warehouse_id`, `category_id`, `item_name`, `current_quantity`, `minimum_stock`, `new_quantity`
+- **`POST /api/reset-data`**: Reset all data and identity sequences (preserves demand forecast table)
+
+## Notebooks
+
+The repository includes Databricks notebooks for setup and advanced features:
+
+### Setup Notebooks
+- **`0 - Setup.ipynb`**: Initial setup and configuration
+- **`1 - Deploy Assets.ipynb`**: Deploy database assets and configure resources
+
+### Demand Forecasting Notebooks
+- **`2.1 - Generate Synthetic Sales Data.ipynb`**: Generate realistic sales data for model training
+- **`2.2 - Demand Forecasting.ipynb`**: Train and deploy demand forecasting model to Model Serving endpoint
+
+## Data Management
 
 ### Environment Variables for Data Control
 
@@ -212,7 +160,7 @@ The application supports several environment variables for flexible data managem
 - **`POSTGRES_CATEGORY_TABLE`**: Customize category table name (default: `inventory_category`)
 - **`POSTGRES_WAREHOUSE_TABLE`**: Customize warehouse table name (default: `inventory_warehouse`)
 - **`POSTGRES_SUPPLIER_TABLE`**: Customize supplier table name (default: `inventory_supplier`)
-- **`POSTGRES_DEMAND_TABLE`**: Customize demand forecast table name (default: `inventory_demand_forecast`)
+- **`MODEL_ENDPOINT_NAME`**: Databricks Model Serving endpoint name for demand forecasting (optional)
 
 ### Data Reset Options
 
@@ -268,14 +216,116 @@ data/
 \i data/inventory_items_data.sql
 ```
 
-## 📄 Sample Data
-=======
+### Using Sample Data
 
-Use the included `sample_inventory.csv` for testing:
-- 10 different equipment items
-- Various categories (Electronics, Furniture, Safety Equipment, Office Supplies)
-- Mix of high and low-value items
-- Some items with low stock alerts
+The application automatically loads comprehensive sample data on first startup (when tables are empty):
+- 40+ realistic product categories across various industries
+- 26 strategically located warehouses across North America with geographic coordinates
+- 30+ suppliers with complete contact information and location data
+- 100+ inventory items with realistic pricing and stock levels
+
+All sample data is TPCDS-aligned for industry-standard analytics and testing.
+
+## Setting Up Demand Forecasting
+
+The demand forecasting feature uses Databricks Model Serving to provide AI-powered inventory recommendations. To enable this feature:
+
+### Step 1: Generate Training Data
+
+Use the provided notebook to generate synthetic sales data:
+- Navigate to `notebooks/2 - DEMAND FORECASTING/2.1 - Generate Synthetic Sales Data.ipynb`
+- Run all cells to create historical sales data in your catalog
+- This creates the foundation for training the forecasting model
+
+### Step 2: Train and Deploy the Model
+
+Train and deploy the demand forecasting model:
+- Open `notebooks/2 - DEMAND FORECASTING/2.2 - Demand Forecasting.ipynb`
+- Run all cells to train the XGBoost forecasting model
+- The notebook automatically deploys the model to a Databricks Model Serving endpoint
+- Note the endpoint name (e.g., `demand-forecast-endpoint`)
+
+### Step 3: Configure the Application
+
+Add the model endpoint to your app.yaml or environment variables:
+
+```yaml
+env:
+  - name: MODEL_ENDPOINT_NAME
+    value: "demand-forecast-endpoint"
+```
+
+Or set as an environment variable:
+
+```bash
+export MODEL_ENDPOINT_NAME="demand-forecast-endpoint"
+```
+
+### How It Works
+
+When enabled, the demand forecasting feature:
+- Predicts demand for the next 90 days (3 months) based on historical sales patterns
+- Calculates safety stock as 10% of forecasted demand
+- Provides intelligent recommendations when adding or editing inventory items
+- Falls back to minimum stock logic if the model endpoint is unavailable or not configured
+- Displays reasoning for all suggestions to help you make informed decisions
+
+The forecasts consider:
+- Warehouse location patterns
+- Product category trends
+- Seasonal variations
+- Historical sales velocity
+
+## Database Schema
+
+The application uses a relational schema with the following tables:
+
+### Core Tables
+- **`inventory_items`**: Main inventory items table with foreign keys to categories, warehouses, and suppliers
+- **`inventory_category`**: Product categories for organizing items
+- **`inventory_warehouse`**: Warehouse locations with geographic data
+- **`inventory_supplier`**: Supplier information for procurement tracking
+
+### Relationships
+- Each inventory item belongs to one category (required)
+- Each inventory item can be assigned to one warehouse (optional)
+- Each inventory item can be linked to one supplier (optional)
+- Demand forecasts are linked to warehouses and categories for prediction accuracy
+
+### Foreign Table Sync
+All tables are synced from Lakebase to Unity Catalog as foreign tables at near-real-time latency, enabling:
+- Analytics on transactional data
+- Integration with Databricks workflows
+- AI/BI dashboard connectivity
+- Delta Lake integration
+
+## Entity Management
+
+The application provides comprehensive management interfaces for all inventory entities:
+
+### Categories Management
+- Create, edit, and delete product categories
+- Organize inventory items by category for better reporting
+- View item counts per category
+- Categories cannot be deleted if they have associated items
+
+### Warehouses Management
+- Manage multiple warehouse locations
+- Track geographic data including:
+  - Address, city, state, country, county, zip code
+  - Latitude and longitude coordinates for mapping
+  - Contact person, phone, and email
+- Associate inventory items with specific warehouses
+- Visualize warehouse locations on maps (via embedded dashboards)
+
+### Suppliers Management
+- Maintain supplier database with complete information:
+  - Contact person, email, phone
+  - Full address with geographic coordinates
+  - Website URL
+  - Tax ID and payment terms
+- Link inventory items to suppliers for procurement tracking
+- Suppliers with associated items require confirmation before deletion
 
 ## Important Notes
 
@@ -284,6 +334,8 @@ Use the included `sample_inventory.csv` for testing:
 - **File encoding should be UTF-8** for best compatibility
 - **Templates are automatically generated** with the latest format requirements
 - **App Resources are required** for Databricks App deployment - ensure both database and secret scope resources are properly configured
+- **Demand forecasting is optional** - the app works with or without a configured model endpoint
+- **Geographic coordinates are optional** but enable map-based visualizations in dashboards
 
 ## Troubleshooting
 
@@ -292,14 +344,36 @@ Use the included `sample_inventory.csv` for testing:
 1. **Database Connection Errors**: 
    - Verify the database resource is added with "Can Connect" permission
    - Check that your PGUSER has proper OAuth identity mapping in the database
+   - Ensure the Lakebase instance is running and accessible
 
 2. **Secret Key Errors**:
    - Ensure the secret scope resource is added with "Can Read" permission
    - Verify the SECRET_KEY exists in the secret scope
+   - Check that the secret scope name matches the one in app resources
 
 3. **Table Creation Issues**:
-   - The app automatically creates the schema and table on first run
+   - The app automatically creates the schema and tables on first run
    - Ensure your database user has CREATE privileges
+   - Check that the schema name doesn't conflict with existing schemas
+
+4. **Dashboard Not Loading**:
+   - Verify DATABRICKS_HOST and DASHBOARD_ID are correctly set
+   - Ensure the dashboard exists and is accessible
+   - Check OAuth token validity using `/api/token-status` endpoint
+   - Verify the app has permissions to access the dashboard
+
+5. **Demand Forecasting Not Working**:
+   - Check that MODEL_ENDPOINT_NAME is set correctly
+   - Verify the Model Serving endpoint is deployed and running
+   - Ensure the app's OAuth token has permissions to call the endpoint
+   - Review the endpoint URL format in logs
+   - The app will fall back to minimum stock logic if the endpoint is unavailable
+
+6. **Sample Data Not Loading**:
+   - Ensure LOAD_SAMPLE_DATA is set to "true" (or not set, as true is default)
+   - Check that tables are empty when the app starts
+   - Verify SQL script files exist in the data/ directory
+   - Review logs for SQL execution errors
 
 ### OAuth Identity Mapping:
 
@@ -310,3 +384,11 @@ If you encounter OAuth identity mismatch errors, run this SQL in your Lakebase i
 ALTER ROLE "your_username@domain.com" 
 SET databricks.oauth.identity = 'your-app-service-principal-id';
 ```
+
+### Debugging Tips:
+
+- Set `DEBUG_SQL=true` to see all SQL queries being executed
+- Check the application logs for detailed error messages
+- Use `/api/token-status` to verify OAuth token validity
+- Use `/api/dashboard-config` to check dashboard configuration
+- Test demand forecasting with `/api/demand-forecast` endpoint directly
