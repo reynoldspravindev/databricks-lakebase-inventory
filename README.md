@@ -65,10 +65,10 @@ This allows for analytics to be performed at NRT for transactional data. And thi
   - PyYAML 6.0+
 - **Databricks Secret Scope** for storing the Flask secret key
 
-#### Optional:
-- **Databricks AI/BI Dashboard** for embedded analytics and visualizations
-- **Databricks Model Serving Endpoint** for AI-powered demand forecasting
-- **Databricks Notebooks** for model training and data generation (included in repository) 
+#### Steps:
+- Set the config variables in "/notebooks/0 - SETUP/0 - Setup.ipynb"
+- Start running the notebooks under the "/notebooks/1 - DEPLOY ASSETS/" and the "/notebooks/1 - DEMAND FORECASTING/" folders in the respective order.
+- These notebooks are self explanatory.  
 
 
 
