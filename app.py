@@ -1513,7 +1513,7 @@ def get_low_stock_items():
         print(f"Get low stock items error: {e}")
         return []
 
-def get_demand_forecast_suggestion(warehouse_id, category_id, item_name, current_quantity, minimum_stock, new_quantity=0):
+def get_demand_forecast_suggestion(warehouse_id, category_id, sku_id, current_quantity, minimum_stock, new_quantity=0):
     """Get suggested quantity based on demand forecast from model serving endpoint with smart inventory analysis."""
     try:
         # Check if model endpoint is configured
@@ -1546,7 +1546,7 @@ def get_demand_forecast_suggestion(warehouse_id, category_id, item_name, current
             {
                 "warehouse_id": float(warehouse_id),
                 "category_id": float(category_id),
-                "item_name": item_name,
+                "sku_id": float(sku_id),
                 "month": float(m)
             }
             for m in months
@@ -1959,7 +1959,7 @@ def api_demand_forecast():
     """API endpoint to get demand forecast suggestion."""
     warehouse_id = request.args.get('warehouse_id', type=int)
     category_id = request.args.get('category_id', type=int)
-    item_name = request.args.get('item_name', type=str)
+    sku_id = request.args.get('sku_id', type=int)
     current_quantity = request.args.get('current_quantity', 0, type=int)
     minimum_stock = request.args.get('minimum_stock', type=int)
     new_quantity = request.args.get('new_quantity', 0, type=int)
@@ -1967,10 +1967,10 @@ def api_demand_forecast():
     if not warehouse_id or not category_id:
         return jsonify({'error': 'warehouse_id and category_id are required'}), 400
     
-    if not item_name:
-        return jsonify({'error': 'item_name is required'}), 400
+    if not sku_id:
+        return jsonify({'error': 'sku_id is required'}), 400
     
-    suggestion = get_demand_forecast_suggestion(warehouse_id, category_id, item_name, current_quantity, minimum_stock, new_quantity)
+    suggestion = get_demand_forecast_suggestion(warehouse_id, category_id, sku_id, current_quantity, minimum_stock, new_quantity)
     return jsonify(suggestion)
 
 @app.route('/api/reset-data', methods=['POST'])
