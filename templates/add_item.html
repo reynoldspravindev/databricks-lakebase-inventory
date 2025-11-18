@@ -14,15 +14,8 @@
             <div class="card-body">
                 <form method="POST" action="{{ url_for('add_item_route') }}">
                     <div class="row">
-                        <!-- Item Name -->
-                        <div class="col-md-6 mb-3">
-                            <label for="item_name" class="form-label">Item Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="item_name" name="item_name" required 
-                                   placeholder="Enter item name">
-                        </div>
-
                         <!-- Category -->
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-12 mb-3">
                             <label for="category_id" class="form-label">Category <span class="text-danger">*</span></label>
                             <select class="form-select" id="category_id" name="category_id" required>
                                 <option value="">Select a category...</option>
@@ -38,11 +31,15 @@
                         </div>
                     </div>
 
-                    <!-- Description -->
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" 
-                                  placeholder="Enter detailed description of the item"></textarea>
+                    <div class="row">
+                        <!-- SKU/Item -->
+                        <div class="col-md-12 mb-3">
+                            <label for="sku_id" class="form-label">Product (SKU) <span class="text-danger">*</span></label>
+                            <select class="form-select" id="sku_id" name="sku_id" required disabled>
+                                <option value="">Select a category first...</option>
+                            </select>
+                            <div class="form-text" id="skuDescription"></div>
+                        </div>
                     </div>
 
                     <div class="row">
@@ -150,14 +147,54 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const categorySelect = document.getElementById('category_id');
+    const skuSelect = document.getElementById('sku_id');
+    const skuDescription = document.getElementById('skuDescription');
     const quantityInput = document.getElementById('quantity');
     const unitPriceInput = document.getElementById('unit_price');
     const totalValueSpan = document.getElementById('totalValue');
-    const getForecastBtn = document.getElementById('getForecastBtn');
-    const forecastSuggestion = document.getElementById('forecastSuggestion');
-    const suggestedQuantity = document.getElementById('suggestedQuantity');
-    const suggestionReasoning = document.getElementById('suggestionReasoning');
-    const applySuggestionBtn = document.getElementById('applySuggestion');
+
+    // Load SKUs when category changes
+    categorySelect.addEventListener('change', function() {
+        const categoryId = this.value;
+        
+        if (!categoryId) {
+            skuSelect.disabled = true;
+            skuSelect.innerHTML = '<option value="">Select a category first...</option>';
+            skuDescription.textContent = '';
+            return;
+        }
+
+        // Fetch SKUs for this category
+        fetch(`/api/skus-by-category/${categoryId}`)
+            .then(response => response.json())
+            .then(skus => {
+                skuSelect.innerHTML = '<option value="">Select a product...</option>';
+                skus.forEach(sku => {
+                    const option = document.createElement('option');
+                    option.value = sku.sku_id;
+                    option.textContent = `${sku.sku_code} - ${sku.item_name}`;
+                    option.dataset.description = sku.description || '';
+                    skuSelect.appendChild(option);
+                });
+                skuSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading SKUs:', error);
+                alert('Failed to load products for this category.');
+            });
+    });
+
+    // Show SKU description when SKU changes
+    skuSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (selectedOption && selectedOption.dataset.description) {
+            skuDescription.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle"></i> ' + 
+                                      selectedOption.dataset.description + '</small>';
+        } else {
+            skuDescription.textContent = '';
+        }
+    });
 
     function updateTotalValue() {
         const quantity = parseFloat(quantityInput.value) || 0;
@@ -166,87 +203,11 @@ document.addEventListener('DOMContentLoaded', function() {
         totalValueSpan.textContent = totalValue.toFixed(2);
     }
 
-    function getDemandForecast() {
-        const warehouseId = document.getElementById('warehouse_id').value;
-        const categoryId = document.getElementById('category_id').value;
-        const itemName = document.getElementById('item_name').value.trim();
-        const newQuantity = parseInt(quantityInput.value) || 0;
-        const minimumStock = parseInt(document.getElementById('minimum_stock').value) || null;
-
-        if (!warehouseId || !categoryId) {
-            alert('Please select both warehouse and category before getting forecast suggestion.');
-            return;
-        }
-
-        if (!itemName) {
-            alert('Please enter an item name before getting forecast suggestion.');
-            return;
-        }
-
-        getForecastBtn.disabled = true;
-        getForecastBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-        // First, check if this item already exists in the selected warehouse/category
-        fetch(`/api/items`)
-            .then(response => response.json())
-            .then(items => {
-                // Look for existing item with same name, warehouse, and category
-                const existingItem = items.find(item => 
-                    item.item_name.toLowerCase() === itemName.toLowerCase() &&
-                    item.warehouse_id === parseInt(warehouseId) &&
-                    item.category_id === parseInt(categoryId)
-                );
-
-                // Use existing quantity if item exists, otherwise 0 for new items
-                const currentQuantity = existingItem ? existingItem.quantity : 0;
-
-                // Show info message if item already exists
-                if (existingItem) {
-                    console.log(`Found existing item: ${existingItem.item_name} with quantity ${existingItem.quantity}`);
-                }
-
-                // Now make the forecast call with the correct current quantity
-                const minStockParam = minimumStock ? minimumStock : '';
-                const itemNameParam = encodeURIComponent(itemName);
-                return fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&item_name=${itemNameParam}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`);
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert('Error: ' + data.error);
-                    return;
-                }
-
-                suggestedQuantity.textContent = data.suggested_quantity;
-                suggestionReasoning.textContent = data.reasoning;
-                forecastSuggestion.style.display = 'block';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Failed to get forecast suggestion. Please try again.');
-            })
-            .finally(() => {
-                getForecastBtn.disabled = false;
-                getForecastBtn.innerHTML = '<i class="fas fa-magic"></i>';
-            });
-    }
-
-    function applySuggestion() {
-        const suggested = suggestedQuantity.textContent;
-        if (suggested) {
-            quantityInput.value = suggested;
-            updateTotalValue();
-            forecastSuggestion.style.display = 'none';
-        }
-    }
-
     quantityInput.addEventListener('input', updateTotalValue);
     unitPriceInput.addEventListener('input', updateTotalValue);
-    getForecastBtn.addEventListener('click', getDemandForecast);
-    applySuggestionBtn.addEventListener('click', applySuggestion);
     
     // Initialize total value calculation
     updateTotalValue();
 });
 </script>
-{% endblock %} 
+{% endblock %}

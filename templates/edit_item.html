@@ -14,37 +14,26 @@
             <div class="card-body">
                 <form method="POST" action="{{ url_for('edit_item_route', item_id=item[0]) }}">
                     <div class="row">
-                        <!-- Item Name -->
-                        <div class="col-md-6 mb-3">
-                            <label for="item_name" class="form-label">Item Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="item_name" name="item_name" required 
-                                   value="{{ item[1] }}" placeholder="Enter item name">
-                        </div>
-
-                        <!-- Category -->
-                        <div class="col-md-6 mb-3">
-                            <label for="category_id" class="form-label">Category <span class="text-danger">*</span></label>
-                            <select class="form-select" id="category_id" name="category_id" required>
-                                <option value="">Select a category...</option>
-                                {% for category in categories %}
-                                    <option value="{{ category[0] }}" {% if category[0] == item[12] %}selected{% endif %}>
-                                        {{ category[1] }}
+                        <!-- SKU/Item -->
+                        <div class="col-md-12 mb-3">
+                            <label for="sku_id" class="form-label">Product (SKU) <span class="text-danger">*</span></label>
+                            <select class="form-select" id="sku_id" name="sku_id" required>
+                                <option value="">Select a product...</option>
+                                {% for sku in skus %}
+                                    <option value="{{ sku[0] }}" 
+                                            {% if sku[0] == item[16] %}selected{% endif %}
+                                            data-category="{{ sku[4] }}"
+                                            data-description="{{ sku[5] or '' }}">
+                                        {{ sku[1] }} - {{ sku[2] }} ({{ sku[4] }})
                                     </option>
                                 {% endfor %}
                             </select>
-                            <div class="form-text">
-                                <a href="{{ url_for('categories_route') }}" target="_blank">
-                                    <i class="fas fa-plus"></i> Manage Categories
-                                </a>
+                            <div class="form-text" id="skuDescription">
+                                {% if item[2] %}
+                                    <small class="text-muted"><i class="fas fa-info-circle"></i> {{ item[2] }}</small>
+                                {% endif %}
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Description -->
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" 
-                                  placeholder="Enter detailed description of the item">{{ item[2] or '' }}</textarea>
                     </div>
 
                     <div class="row">
@@ -170,20 +159,6 @@
                                                 <span class="text-muted">
                                                     {% if item[11] %}
                                                         {{ item[11].strftime('%B %d, %Y at %I:%M %p') }}
-                                                        {% if item[10] and item[11] %}
-                                                            {% set time_diff = item[11] - item[10] %}
-                                                            {% if time_diff.days == 0 and time_diff.seconds < 3600 %}
-                                                                <small class="badge bg-info">Recently added</small>
-                                                            {% elif time_diff.days == 0 %}
-                                                                <small class="badge bg-success">Same day</small>
-                                                            {% elif time_diff.days == 1 %}
-                                                                <small class="badge bg-warning">1 day later</small>
-                                                            {% elif time_diff.days <= 7 %}
-                                                                <small class="badge bg-warning">{{ time_diff.days }} days later</small>
-                                                            {% else %}
-                                                                <small class="badge bg-secondary">{{ time_diff.days }} days later</small>
-                                                            {% endif %}
-                                                        {% endif %}
                                                     {% else %}
                                                         Never modified
                                                     {% endif %}
@@ -192,21 +167,6 @@
                                         </div>
                                     </div>
                                 </div>
-                                {% if item[10] and item[11] %}
-                                    <hr>
-                                    <small class="text-muted">
-                                        <i class="fas fa-info-circle"></i>
-                                        This item was created 
-                                        {% set created_days = (item[11] - item[10]).days %}
-                                        {% if created_days == 0 %}
-                                            today and last modified today.
-                                        {% elif created_days == 1 %}
-                                            yesterday and was last modified 1 day later.
-                                        {% else %}
-                                            {{ created_days }} days ago and was last modified {{ created_days }} days after creation.
-                                        {% endif %}
-                                    </small>
-                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -237,14 +197,22 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const skuSelect = document.getElementById('sku_id');
+    const skuDescription = document.getElementById('skuDescription');
     const quantityInput = document.getElementById('quantity');
     const unitPriceInput = document.getElementById('unit_price');
     const totalValueSpan = document.getElementById('totalValue');
-    const getForecastBtn = document.getElementById('getForecastBtn');
-    const forecastSuggestion = document.getElementById('forecastSuggestion');
-    const suggestedQuantity = document.getElementById('suggestedQuantity');
-    const suggestionReasoning = document.getElementById('suggestionReasoning');
-    const applySuggestionBtn = document.getElementById('applySuggestion');
+
+    // Show SKU description when SKU changes
+    skuSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (selectedOption && selectedOption.dataset.description) {
+            skuDescription.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle"></i> ' + 
+                                      selectedOption.dataset.description + '</small>';
+        } else {
+            skuDescription.innerHTML = '';
+        }
+    });
 
     function updateTotalValue() {
         const quantity = parseFloat(quantityInput.value) || 0;
@@ -253,67 +221,11 @@ document.addEventListener('DOMContentLoaded', function() {
         totalValueSpan.textContent = totalValue.toFixed(2);
     }
 
-    function getDemandForecast() {
-        const warehouseId = document.getElementById('warehouse_id').value;
-        const categoryId = document.getElementById('category_id').value;
-        const itemName = document.getElementById('item_name').value.trim();
-        const currentQuantity = {{ item[6] }}; // Current quantity from database
-        const newQuantity = parseInt(quantityInput.value) || 0;
-        const minimumStock = parseInt(document.getElementById('minimum_stock').value) || null;
-
-        if (!warehouseId || !categoryId) {
-            alert('Please select both warehouse and category before getting forecast suggestion.');
-            return;
-        }
-
-        if (!itemName) {
-            alert('Please enter an item name before getting forecast suggestion.');
-            return;
-        }
-
-        getForecastBtn.disabled = true;
-        getForecastBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-        const minStockParam = minimumStock ? minimumStock : '';
-        const itemNameParam = encodeURIComponent(itemName);
-        fetch(`/api/demand-forecast?warehouse_id=${warehouseId}&category_id=${categoryId}&item_name=${itemNameParam}&current_quantity=${currentQuantity}&minimum_stock=${minStockParam}&new_quantity=${newQuantity}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert('Error: ' + data.error);
-                    return;
-                }
-
-                suggestedQuantity.textContent = data.suggested_quantity;
-                suggestionReasoning.textContent = data.reasoning;
-                forecastSuggestion.style.display = 'block';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Failed to get forecast suggestion. Please try again.');
-            })
-            .finally(() => {
-                getForecastBtn.disabled = false;
-                getForecastBtn.innerHTML = '<i class="fas fa-magic"></i>';
-            });
-    }
-
-    function applySuggestion() {
-        const suggested = suggestedQuantity.textContent;
-        if (suggested) {
-            quantityInput.value = suggested;
-            updateTotalValue();
-            forecastSuggestion.style.display = 'none';
-        }
-    }
-
     quantityInput.addEventListener('input', updateTotalValue);
     unitPriceInput.addEventListener('input', updateTotalValue);
-    getForecastBtn.addEventListener('click', getDemandForecast);
-    applySuggestionBtn.addEventListener('click', applySuggestion);
     
     // Initialize total value calculation
     updateTotalValue();
 });
 </script>
-{% endblock %} 
+{% endblock %}

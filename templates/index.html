@@ -123,6 +123,7 @@
                             <thead>
                                 <tr>
                                     <th>Item Name</th>
+                                    <th>SKU</th>
                                     <th>Category</th>
                                     <th>Warehouse</th>
                                     <th>Quantity</th>
@@ -148,6 +149,9 @@
                                             {% if item[2] %}
                                                 <br><small class="text-muted">{{ item[2][:50] }}{% if item[2]|length > 50 %}...{% endif %}</small>
                                             {% endif %}
+                                        </td>
+                                        <td>
+                                            <code>{{ item[15] }}</code>
                                         </td>
                                         <td>{{ item[3] or '-' }}</td>
                                         <td>{{ item[4] or '-' }}</td>
