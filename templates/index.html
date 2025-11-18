@@ -129,7 +129,6 @@
                                     <th>Quantity</th>
                                     <th>Unit Price</th>
                                     <th>Total Value</th>
-                                    <th>Supplier</th>
                                     <th>Status</th>
                                     <th>Date Added</th>
                                     <th>Last Updated</th>
@@ -165,7 +164,6 @@
                                         </td>
                                         <td>${{ "%.2f"|format(item[7]) }}</td>
                                         <td><strong>${{ "%.2f"|format(item[6] * item[7]) }}</strong></td>
-                                        <td>{{ item[5] or '-' }}</td>
                                         <td>
                                             {% if is_out_of_stock %}
                                                 <span class="badge bg-danger">Out of Stock</span>

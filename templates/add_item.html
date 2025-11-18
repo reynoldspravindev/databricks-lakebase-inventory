@@ -65,11 +65,12 @@
                             </div>
                         </div>
 
-                        <!-- Unit Price -->
+                        <!-- Unit Price (Auto-populated from SKU) -->
                         <div class="col-md-4 mb-3">
                             <label for="unit_price" class="form-label">Unit Price ($) <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" id="unit_price" name="unit_price" required 
-                                   min="0" step="0.01" placeholder="0.00">
+                                   min="0" step="0.01" placeholder="0.00" readonly>
+                            <div class="form-text">Auto-populated from SKU</div>
                         </div>
 
                         <!-- Minimum Stock -->
@@ -162,6 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
             skuSelect.disabled = true;
             skuSelect.innerHTML = '<option value="">Select a category first...</option>';
             skuDescription.textContent = '';
+            unitPriceInput.value = '';
             return;
         }
 
@@ -175,6 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.value = sku.sku_id;
                     option.textContent = `${sku.sku_code} - ${sku.item_name}`;
                     option.dataset.description = sku.description || '';
+                    option.dataset.unitPrice = sku.unit_price || 0;
                     skuSelect.appendChild(option);
                 });
                 skuSelect.disabled = false;
@@ -185,14 +188,28 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
 
-    // Show SKU description when SKU changes
+    // Show SKU description and set unit price when SKU changes
     skuSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];
-        if (selectedOption && selectedOption.dataset.description) {
-            skuDescription.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle"></i> ' + 
-                                      selectedOption.dataset.description + '</small>';
+        if (selectedOption && selectedOption.value) {
+            // Set unit price from SKU
+            const unitPrice = selectedOption.dataset.unitPrice || 0;
+            unitPriceInput.value = parseFloat(unitPrice).toFixed(2);
+            
+            // Show description
+            if (selectedOption.dataset.description) {
+                skuDescription.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle"></i> ' + 
+                                          selectedOption.dataset.description + '</small>';
+            } else {
+                skuDescription.textContent = '';
+            }
+            
+            // Update total value
+            updateTotalValue();
         } else {
             skuDescription.textContent = '';
+            unitPriceInput.value = '';
+            updateTotalValue();
         }
     });
 

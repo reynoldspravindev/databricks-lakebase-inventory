@@ -357,6 +357,22 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(10px);
             background: rgba(30, 41, 59, 0.95);
+            z-index: 1050;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        
+        .navbar .dropdown {
+            position: static;
+        }
+        
+        .navbar .dropdown-menu {
+            position: absolute;
+            z-index: 1050;
+        }
+        
+        .navbar-collapse {
+            overflow: visible;
         }
 
         .dropdown-item {
@@ -563,6 +579,9 @@
                             <li><a class="dropdown-item" href="{{ url_for('categories_route') }}">
                                 <i class="fas fa-tags"></i> Categories
                             </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('skus_route') }}">
+                                <i class="fas fa-barcode"></i> SKUs
+                            </a></li>
                             <li><a class="dropdown-item" href="{{ url_for('warehouses_route') }}">
                                 <i class="fas fa-warehouse"></i> Warehouses
                             </a></li>
@@ -577,6 +596,19 @@
                     </a>
                 </li>
                 </ul>
+                <div class="navbar-text ms-auto d-flex align-items-center">
+                    <span class="text-muted small me-2">Powered by</span>
+                    <a href="https://databricks.com" target="_blank" class="text-decoration-none d-flex align-items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 100 100" class="me-1" style="vertical-align: middle;">
+                            <!-- Top layer -->
+                            <path d="M50,15 L80,30 L80,45 L50,60 L20,45 L20,30 Z" fill="none" stroke="#E8583D" stroke-width="5" stroke-linejoin="miter"/>
+                            <!-- Middle layer -->
+                            <path d="M50,35 L80,50 L80,65 L50,80 L20,65 L20,50 Z" fill="none" stroke="#E8583D" stroke-width="5" stroke-linejoin="miter"/>
+                            <!-- Bottom layer -->
+                            <path d="M50,55 L80,70 L80,85 L50,100 L20,85 L20,70 Z" fill="none" stroke="#E8583D" stroke-width="5" stroke-linejoin="miter"/>
+                        </svg>
+                    </a>
+                </div>
             </div>
         </div>
     </nav>

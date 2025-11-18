@@ -617,6 +617,7 @@ def init_database():
                         item_name varchar(100) NOT NULL,
                         category_id int4 NOT NULL,
                         description text NULL,
+                        unit_price float8 NOT NULL DEFAULT 0.0,
                         date_created timestamp DEFAULT CURRENT_TIMESTAMP,
                         last_updated timestamp DEFAULT CURRENT_TIMESTAMP,
                         PRIMARY KEY (sku_id),
@@ -630,6 +631,26 @@ def init_database():
                 )
                 cur.execute(create_sku_table_sql)
                 print(f"✅ Table '{schema_name}.{sku_table_name}' ready")
+                
+                # Add unit_price column to existing SKU table if it doesn't exist
+                cur.execute(sql.SQL("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s AND column_name = 'unit_price'
+                """), (schema_name, sku_table_name))
+                
+                has_unit_price = cur.fetchone() is not None
+                
+                if not has_unit_price:
+                    print("🔧 Adding unit_price column to SKU table...")
+                    cur.execute(sql.SQL("""
+                        ALTER TABLE {}.{}
+                        ADD COLUMN unit_price float8 NOT NULL DEFAULT 0.0
+                    """).format(
+                        sql.Identifier(schema_name),
+                        sql.Identifier(sku_table_name)
+                    ))
+                    print("✅ Added unit_price column to SKU table")
                 
                 # Create inventory_items table (fresh deployment)
                 print(f"🔧 Creating table '{schema_name}.{table_name}' if it doesn't exist...")
@@ -1031,7 +1052,7 @@ def get_skus():
                 sku_table = get_sku_table_name()
                 category_table = get_category_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT s.sku_id, s.sku_code, s.item_name, s.category_id, c.category_name, s.description
+                    SELECT s.sku_id, s.sku_code, s.item_name, s.category_id, c.category_name, s.description, s.unit_price
                     FROM {}.{} s
                     LEFT JOIN {}.{} c ON s.category_id = c.category_id
                     ORDER BY s.sku_code ASC
@@ -1052,7 +1073,7 @@ def get_skus_by_category(category_id):
                 schema = get_schema_name()
                 sku_table = get_sku_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT sku_id, sku_code, item_name, description
+                    SELECT sku_id, sku_code, item_name, description, unit_price
                     FROM {}.{}
                     WHERE category_id = %s
                     ORDER BY sku_code ASC
@@ -1071,7 +1092,7 @@ def get_sku(sku_id):
                 sku_table = get_sku_table_name()
                 category_table = get_category_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT s.sku_id, s.sku_code, s.item_name, s.category_id, c.category_name, s.description
+                    SELECT s.sku_id, s.sku_code, s.item_name, s.category_id, c.category_name, s.description, s.unit_price
                     FROM {}.{} s
                     LEFT JOIN {}.{} c ON s.category_id = c.category_id
                     WHERE s.sku_id = %s
@@ -1083,6 +1104,58 @@ def get_sku(sku_id):
     except Exception as e:
         print(f"Get SKU error: {e}")
         return None
+
+def add_sku(sku_code, item_name, category_id, unit_price, description=None):
+    """Add a new SKU."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                sku_table = get_sku_table_name()
+                cur.execute(sql.SQL("""
+                    INSERT INTO {}.{} (sku_code, item_name, category_id, unit_price, description, date_created, last_updated)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier(schema), sql.Identifier(sku_table)),
+                (sku_code, item_name, category_id, unit_price, description, datetime.now(), datetime.now()))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Add SKU error: {e}")
+        return False
+
+def update_sku(sku_id, sku_code, item_name, category_id, unit_price, description=None):
+    """Update an existing SKU."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                sku_table = get_sku_table_name()
+                cur.execute(sql.SQL("""
+                    UPDATE {}.{} 
+                    SET sku_code = %s, item_name = %s, category_id = %s, unit_price = %s, description = %s, last_updated = %s
+                    WHERE sku_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(sku_table)),
+                (sku_code, item_name, category_id, unit_price, description, datetime.now(), sku_id))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Update SKU error: {e}")
+        return False
+
+def delete_sku(sku_id):
+    """Delete a SKU."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                sku_table = get_sku_table_name()
+                cur.execute(sql.SQL("DELETE FROM {}.{} WHERE sku_id = %s").format(
+                    sql.Identifier(schema), sql.Identifier(sku_table)), (sku_id,))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Delete SKU error: {e}")
+        return False
 
 def add_inventory_item(sku_id, quantity, unit_price, warehouse_id=None, supplier_id=None, location=None, minimum_stock=None):
     """Add a new inventory item."""
@@ -1278,7 +1351,7 @@ def process_csv_file(file_content):
         }
 
 def get_inventory_items():
-    """Get all inventory items with SKU, category, warehouse, and supplier information."""
+    """Get all inventory items grouped by SKU and warehouse, aggregating quantities."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -1287,24 +1360,37 @@ def get_inventory_items():
                 sku_table = get_sku_table_name()
                 category_table = get_category_table_name()
                 warehouse_table = get_warehouse_table_name()
-                supplier_table = get_supplier_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT i.id, sk.item_name, sk.description, c.category_name, w.warehouse_name, sup.supplier_name,
-                           i.quantity, i.unit_price, i.location, i.minimum_stock, 
-                           i.date_added, i.last_updated, sk.category_id, i.warehouse_id, i.supplier_id, 
-                           sk.sku_code, i.sku_id
+                    SELECT 
+                        MIN(i.id) as id,
+                        sk.item_name, 
+                        sk.description, 
+                        c.category_name, 
+                        w.warehouse_name,
+                        NULL as supplier_name,
+                        SUM(i.quantity) as quantity,
+                        AVG(i.unit_price) as unit_price,
+                        STRING_AGG(DISTINCT i.location, ', ') as location,
+                        MAX(i.minimum_stock) as minimum_stock,
+                        MIN(i.date_added) as date_added,
+                        MAX(i.last_updated) as last_updated,
+                        sk.category_id,
+                        i.warehouse_id,
+                        NULL as supplier_id,
+                        sk.sku_code,
+                        i.sku_id
                     FROM {}.{} i
                     INNER JOIN {}.{} sk ON i.sku_id = sk.sku_id
                     LEFT JOIN {}.{} c ON sk.category_id = c.category_id
                     LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
-                    LEFT JOIN {}.{} sup ON i.supplier_id = sup.supplier_id
+                    GROUP BY i.sku_id, sk.item_name, sk.description, c.category_name, 
+                             w.warehouse_name, i.warehouse_id, sk.category_id, sk.sku_code
                     ORDER BY sk.item_name ASC
                 """).format(
                     sql.Identifier(schema), sql.Identifier(table_name),
                     sql.Identifier(schema), sql.Identifier(sku_table),
                     sql.Identifier(schema), sql.Identifier(category_table),
-                    sql.Identifier(schema), sql.Identifier(warehouse_table),
-                    sql.Identifier(schema), sql.Identifier(supplier_table)
+                    sql.Identifier(schema), sql.Identifier(warehouse_table)
                 ))
                 return cur.fetchall()
     except Exception as e:
@@ -1380,30 +1466,47 @@ def delete_inventory_item(item_id):
         return False
 
 def get_low_stock_items():
-    """Get items with quantity at or below minimum stock level."""
+    """Get items with quantity at or below minimum stock level, grouped by SKU and warehouse."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 schema = get_schema_name()
                 table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                sku_table = get_sku_table_name()
                 category_table = get_category_table_name()
                 warehouse_table = get_warehouse_table_name()
-                supplier_table = get_supplier_table_name()
                 cur.execute(sql.SQL("""
-                    SELECT i.id, i.item_name, i.description, c.category_name, w.warehouse_name, s.supplier_name,
-                           i.quantity, i.unit_price, i.location, i.minimum_stock, 
-                           i.date_added, i.last_updated, i.category_id, i.warehouse_id, i.supplier_id
+                    SELECT 
+                        MIN(i.id) as id,
+                        sk.item_name,
+                        sk.description,
+                        c.category_name,
+                        w.warehouse_name,
+                        NULL as supplier_name,
+                        SUM(i.quantity) as quantity,
+                        AVG(i.unit_price) as unit_price,
+                        STRING_AGG(DISTINCT i.location, ', ') as location,
+                        MAX(i.minimum_stock) as minimum_stock,
+                        MIN(i.date_added) as date_added,
+                        MAX(i.last_updated) as last_updated,
+                        sk.category_id,
+                        i.warehouse_id,
+                        NULL as supplier_id,
+                        sk.sku_code,
+                        i.sku_id
                     FROM {}.{} i
-                    LEFT JOIN {}.{} c ON i.category_id = c.category_id
+                    INNER JOIN {}.{} sk ON i.sku_id = sk.sku_id
+                    LEFT JOIN {}.{} c ON sk.category_id = c.category_id
                     LEFT JOIN {}.{} w ON i.warehouse_id = w.warehouse_id
-                    LEFT JOIN {}.{} s ON i.supplier_id = s.supplier_id
-                    WHERE i.minimum_stock IS NOT NULL AND i.quantity <= i.minimum_stock
-                    ORDER BY (i.quantity - i.minimum_stock) ASC
+                    GROUP BY i.sku_id, sk.item_name, sk.description, c.category_name,
+                             w.warehouse_name, i.warehouse_id, sk.category_id, sk.sku_code
+                    HAVING MAX(i.minimum_stock) IS NOT NULL AND SUM(i.quantity) <= MAX(i.minimum_stock)
+                    ORDER BY (SUM(i.quantity) - MAX(i.minimum_stock)) ASC
                 """).format(
                     sql.Identifier(schema), sql.Identifier(table_name),
+                    sql.Identifier(schema), sql.Identifier(sku_table),
                     sql.Identifier(schema), sql.Identifier(category_table),
-                    sql.Identifier(schema), sql.Identifier(warehouse_table),
-                    sql.Identifier(schema), sql.Identifier(supplier_table)
+                    sql.Identifier(schema), sql.Identifier(warehouse_table)
                 ))
                 return cur.fetchall()
     except Exception as e:
@@ -1826,7 +1929,8 @@ def api_skus_by_category(category_id):
             'sku_id': sku[0],
             'sku_code': sku[1],
             'item_name': sku[2],
-            'description': sku[3]
+            'description': sku[3],
+            'unit_price': float(sku[4]) if sku[4] else 0.0
         })
     return jsonify(skus_list)
 
@@ -2120,6 +2224,74 @@ def delete_supplier_route(supplier_id):
     else:
         flash('Failed to delete supplier. Make sure no items are using this supplier.', 'error')
     return redirect(url_for('suppliers_route'))
+
+# SKU management routes
+@app.route('/skus')
+def skus_route():
+    """Show all SKUs."""
+    skus = get_skus()
+    low_stock_items = get_low_stock_items()
+    return render_template('skus.html', skus=skus, low_stock_count=len(low_stock_items))
+
+@app.route('/skus/add', methods=['GET', 'POST'])
+def add_sku_route():
+    """Add a new SKU."""
+    if request.method == 'POST':
+        sku_code = request.form.get('sku_code', '').strip()
+        item_name = request.form.get('item_name', '').strip()
+        category_id = request.form.get('category_id', type=int)
+        unit_price = request.form.get('unit_price', type=float)
+        description = request.form.get('description', '').strip() or None
+        
+        if sku_code and item_name and category_id and unit_price is not None:
+            if add_sku(sku_code, item_name, category_id, unit_price, description):
+                flash('SKU added successfully!', 'success')
+            else:
+                flash('Failed to add SKU. SKU code might already exist.', 'error')
+        else:
+            flash('Please fill in all required fields.', 'error')
+        return redirect(url_for('skus_route'))
+    
+    categories = get_categories()
+    low_stock_items = get_low_stock_items()
+    return render_template('add_sku.html', categories=categories, low_stock_count=len(low_stock_items))
+
+@app.route('/skus/edit/<int:sku_id>', methods=['GET', 'POST'])
+def edit_sku_route(sku_id):
+    """Edit an existing SKU."""
+    sku = get_sku(sku_id)
+    if not sku:
+        flash('SKU not found.', 'error')
+        return redirect(url_for('skus_route'))
+    
+    if request.method == 'POST':
+        sku_code = request.form.get('sku_code', '').strip()
+        item_name = request.form.get('item_name', '').strip()
+        category_id = request.form.get('category_id', type=int)
+        unit_price = request.form.get('unit_price', type=float)
+        description = request.form.get('description', '').strip() or None
+        
+        if sku_code and item_name and category_id and unit_price is not None:
+            if update_sku(sku_id, sku_code, item_name, category_id, unit_price, description):
+                flash('SKU updated successfully!', 'success')
+            else:
+                flash('Failed to update SKU.', 'error')
+        else:
+            flash('Please fill in all required fields.', 'error')
+        return redirect(url_for('skus_route'))
+    
+    categories = get_categories()
+    low_stock_items = get_low_stock_items()
+    return render_template('edit_sku.html', sku=sku, categories=categories, low_stock_count=len(low_stock_items))
+
+@app.route('/skus/delete/<int:sku_id>')
+def delete_sku_route(sku_id):
+    """Delete a SKU."""
+    if delete_sku(sku_id):
+        flash('SKU deleted successfully!', 'success')
+    else:
+        flash('Failed to delete SKU. Make sure no items are using this SKU.', 'error')
+    return redirect(url_for('skus_route'))
 
 
 if __name__ == '__main__':
