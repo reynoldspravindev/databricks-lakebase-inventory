@@ -2236,6 +2236,10 @@
       ],
       "widgetHeaderAlignment": "LEFT"
     },
+    "genieSpace": {
+      "isEnabled": true,
+      "enablementMode": "ENABLED"
+    },
     "applyModeEnabled": false
   }
 }
