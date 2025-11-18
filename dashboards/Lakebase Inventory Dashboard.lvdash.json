@@ -124,12 +124,23 @@
         "GROUP BY c.category_name\n",
         "ORDER BY total_value DESC"
       ]
+    },
+    {
+      "name": "6005d4ec",
+      "displayName": "store_sales",
+      "queryLines": [
+        "SELECT CAST(date_trunc(\"month\", date) AS DATE) as month,\n",
+        "       sum(ss_sales_price)  AS total_sales\n",
+        "FROM reynolds_inventory.inventory_analytics.store_sales\n",
+        "\n",
+        "GROUP BY 1"
+      ]
     }
   ],
   "pages": [
     {
       "name": "inventory_dashboard",
-      "displayName": "Inventory Management Dashboard",
+      "displayName": "Inventory",
       "layout": [
         {
           "widget": {
@@ -2069,6 +2080,68 @@
             "y": 3,
             "width": 2,
             "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "sales-by-category-warehouse-month",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "inventory_items_dataset",
+                  "fields": [
+                    {
+                      "name": "category_name",
+                      "expression": "`category_name`"
+                    },
+                    {
+                      "name": "monthly(date_added)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `date_added`)"
+                    },
+                    {
+                      "name": "sum(total_value)",
+                      "expression": "SUM(`total_value`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(date_added)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(total_value)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "category_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "title": "Sales by category, warehouse and month",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 24,
+            "width": 3,
+            "height": 6
           }
         }
       ],

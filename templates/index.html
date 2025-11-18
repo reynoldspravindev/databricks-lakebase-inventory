@@ -13,10 +13,6 @@
                 <a href="{{ url_for('add_item_route') }}" class="btn btn-success">
                     <i class="fas fa-plus"></i> Add New Item
                 </a>
-                <button class="btn btn-primary ms-2" id="optimizeInventoryBtn" disabled 
-                        title="AI-powered inventory optimization (coming soon)">
-                    <i class="fas fa-robot"></i> Optimize Inventory
-                </button>
                 {% if low_stock_count > 0 %}
                     <a href="{{ url_for('low_stock_route') }}" class="btn btn-warning ms-2">
                         <i class="fas fa-exclamation-triangle"></i> Low Stock ({{ low_stock_count }})
@@ -444,14 +440,6 @@ document.addEventListener('DOMContentLoaded', function() {
     categoryFilter.addEventListener('change', filterTable);
     stockFilter.addEventListener('change', filterTable);
     warehouseFilter.addEventListener('change', filterTable);
-    
-    // Optimize Inventory button (disabled for now)
-    const optimizeBtn = document.getElementById('optimizeInventoryBtn');
-    if (optimizeBtn) {
-        optimizeBtn.addEventListener('click', function() {
-            alert('Inventory optimization feature is coming soon! This will use AI/ML models to optimize inventory across all warehouses based on demand forecasts.');
-        });
-    }
 });
 </script>
 {% endblock %} 
