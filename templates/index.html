@@ -440,6 +440,145 @@ document.addEventListener('DOMContentLoaded', function() {
     categoryFilter.addEventListener('change', filterTable);
     stockFilter.addEventListener('change', filterTable);
     warehouseFilter.addEventListener('change', filterTable);
+    
+    // Show OMS confirmation modal if present
+    {% if oms_confirmation %}
+    const omsModal = new bootstrap.Modal(document.getElementById('omsConfirmationModal'));
+    omsModal.show();
+    {% endif %}
 });
 </script>
+
+<!-- OMS Order Confirmation Modal -->
+{% if oms_confirmation %}
+<style>
+.modal-content {
+    background-color: #1e293b;
+    color: #e2e8f0;
+}
+.modal-header .btn-close {
+    filter: invert(1);
+}
+.oms-info-box {
+    background-color: #334155;
+    border-left: 3px solid #10b981;
+}
+.oms-label {
+    color: #94a3b8;
+}
+.oms-value {
+    color: #f1f5f9;
+}
+.oms-section-title {
+    color: #cbd5e1;
+    font-weight: 600;
+}
+</style>
+
+<div class="modal fade" id="omsConfirmationModal" tabindex="-1" aria-labelledby="omsConfirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title text-white" id="omsConfirmationModalLabel">
+                    <i class="fas fa-check-circle text-success"></i> Order Placed Successfully
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <div class="oms-info-box p-3 rounded mb-4">
+                    <p class="mb-0 text-white"><strong>Order Management System (OMS) Confirmation</strong></p>
+                    <small class="oms-label">Your order has been successfully submitted and is being processed.</small>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="oms-section-title mb-3">Order Details</h6>
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td width="45%" class="oms-label">Order ID</td>
+                                <td class="oms-value"><strong>{{ oms_confirmation.order_id }}</strong></td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Tracking Number</td>
+                                <td class="oms-value"><code style="background: #334155; color: #a78bfa; padding: 2px 6px; border-radius: 4px;">{{ oms_confirmation.tracking_number }}</code></td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Status</td>
+                                <td><span class="badge bg-success">{{ oms_confirmation.status }}</span></td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Order Date</td>
+                                <td class="oms-value">{{ oms_confirmation.order_date }}</td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Estimated Arrival</td>
+                                <td class="oms-value">
+                                    <strong>{{ oms_confirmation.eta_date }}</strong>
+                                    <br><small class="oms-label">({{ oms_confirmation.eta_days }} business days)</small>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <h6 class="oms-section-title mb-3">Item Information</h6>
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td width="45%" class="oms-label">SKU Code</td>
+                                <td class="oms-value"><code style="background: #334155; color: #a78bfa; padding: 2px 6px; border-radius: 4px;">{{ oms_confirmation.sku_code }}</code></td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Item Name</td>
+                                <td class="oms-value">{{ oms_confirmation.item_name }}</td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Quantity</td>
+                                <td class="oms-value"><strong>{{ oms_confirmation.quantity }}</strong> units</td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Unit Price</td>
+                                <td class="oms-value">${{ "%.2f"|format(oms_confirmation.unit_price) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="oms-label">Total Value</td>
+                                <td class="oms-value"><strong>${{ "%.2f"|format(oms_confirmation.total_value) }}</strong></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6 mb-2">
+                        <h6 class="oms-section-title mb-2">Delivery Information</h6>
+                        <p class="mb-1 oms-value"><span class="oms-label">Warehouse:</span> {{ oms_confirmation.warehouse }}</p>
+                        <p class="mb-1 oms-value"><span class="oms-label">Supplier:</span> {{ oms_confirmation.supplier }}</p>
+                        <p class="mb-0 oms-value"><span class="oms-label">Shipping:</span> {{ oms_confirmation.shipping_method }}</p>
+                    </div>
+                    
+                    <div class="col-md-6 mb-2">
+                        <h6 class="oms-section-title mb-2">Payment Information</h6>
+                        <p class="mb-1 oms-value"><span class="oms-label">Payment Method:</span> {{ oms_confirmation.payment_method }}</p>
+                        <p class="mb-0 oms-value"><span class="oms-label">Amount Due:</span> ${{ "%.2f"|format(oms_confirmation.total_value) }}</p>
+                    </div>
+                </div>
+                
+                <div class="oms-info-box p-3 rounded" style="border-left-color: #818cf8;">
+                    <p class="mb-2 text-white"><strong>Next Steps</strong></p>
+                    <ul class="mb-0 small oms-label" style="padding-left: 1.2rem;">
+                        <li>Confirmation email sent to procurement team</li>
+                        <li>Track using: <code style="background: #334155; color: #a78bfa; padding: 2px 6px; border-radius: 4px;">{{ oms_confirmation.tracking_number }}</code></li>
+                        <li>Inventory will be updated automatically upon delivery</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background-color: #475569;">Close</button>
+                <button type="button" class="btn" onclick="window.print()" style="background-color: #818cf8; color: white;">
+                    <i class="fas fa-print"></i> Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %} 

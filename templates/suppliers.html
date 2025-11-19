@@ -13,6 +13,42 @@
         </div>
 
         {% if suppliers %}
+        <!-- Filter Section -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="countryFilter" class="form-label">
+                            <i class="fas fa-filter"></i> Filter by Country
+                        </label>
+                        <select class="form-select" id="countryFilter">
+                            <option value="">All Countries</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="stateFilter" class="form-label">
+                            <i class="fas fa-filter"></i> Filter by State/Province
+                        </label>
+                        <select class="form-select" id="stateFilter">
+                            <option value="">All States/Provinces</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="searchInput" class="form-label">
+                            <i class="fas fa-search"></i> Search Supplier
+                        </label>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Search by name or contact...">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label d-block">&nbsp;</label>
+                        <button class="btn btn-outline-secondary w-100" id="clearFilters">
+                            <i class="fas fa-undo"></i> Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="card">
             <div class="card-body">
                 <div class="table-responsive">
@@ -30,9 +66,14 @@
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="supplierTableBody">
                             {% for supplier in suppliers %}
-                            <tr>
+                            <tr class="supplier-row" 
+                                data-supplier-name="{{ supplier[1] }}"
+                                data-contact="{{ supplier[2] or '' }}"
+                                data-city="{{ supplier[6] or '' }}"
+                                data-state="{{ supplier[7] or '' }}"
+                                data-country="{{ supplier[8] or '' }}">
                                 <td>{{ supplier[0] }}</td>
                                 <td>
                                     <strong>{{ supplier[1] }}</strong>
@@ -110,4 +151,109 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const countryFilter = document.getElementById('countryFilter');
+    const stateFilter = document.getElementById('stateFilter');
+    const searchInput = document.getElementById('searchInput');
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    const supplierRows = document.querySelectorAll('.supplier-row');
+    
+    // Populate country and state filters with unique values
+    const countries = new Set();
+    const states = new Set();
+    
+    supplierRows.forEach(row => {
+        const country = row.dataset.country;
+        const state = row.dataset.state;
+        if (country) countries.add(country);
+        if (state) states.add(state);
+    });
+    
+    Array.from(countries).sort().forEach(country => {
+        const option = document.createElement('option');
+        option.value = country;
+        option.textContent = country;
+        countryFilter.appendChild(option);
+    });
+    
+    Array.from(states).sort().forEach(state => {
+        const option = document.createElement('option');
+        option.value = state;
+        option.textContent = state;
+        stateFilter.appendChild(option);
+    });
+    
+    // Filter function
+    function filterSuppliers() {
+        const selectedCountry = countryFilter.value.toLowerCase();
+        const selectedState = stateFilter.value.toLowerCase();
+        const searchTerm = searchInput.value.toLowerCase();
+        
+        let visibleCount = 0;
+        
+        supplierRows.forEach(row => {
+            const country = row.dataset.country.toLowerCase();
+            const state = row.dataset.state.toLowerCase();
+            const name = row.dataset.supplierName.toLowerCase();
+            const contact = row.dataset.contact.toLowerCase();
+            const city = row.dataset.city.toLowerCase();
+            
+            const matchesCountry = !selectedCountry || country === selectedCountry;
+            const matchesState = !selectedState || state === selectedState;
+            const matchesSearch = !searchTerm || 
+                                  name.includes(searchTerm) || 
+                                  contact.includes(searchTerm) ||
+                                  city.includes(searchTerm);
+            
+            if (matchesCountry && matchesState && matchesSearch) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Show "no results" message if needed
+        showNoResultsMessage(visibleCount === 0);
+    }
+    
+    function showNoResultsMessage(show) {
+        let noResultsMsg = document.getElementById('noResultsMessage');
+        const tableBody = document.getElementById('supplierTableBody');
+        
+        if (show && !noResultsMsg) {
+            noResultsMsg = document.createElement('tr');
+            noResultsMsg.id = 'noResultsMessage';
+            noResultsMsg.innerHTML = `
+                <td colspan="9" class="text-center py-5">
+                    <i class="fas fa-search fa-3x text-muted mb-3 d-block"></i>
+                    <h5 class="text-muted">No Suppliers Found</h5>
+                    <p class="text-muted">Try adjusting your filters.</p>
+                </td>
+            `;
+            tableBody.appendChild(noResultsMsg);
+        } else if (!show && noResultsMsg) {
+            noResultsMsg.remove();
+        }
+    }
+    
+    // Clear filters
+    function clearFilters() {
+        countryFilter.value = '';
+        stateFilter.value = '';
+        searchInput.value = '';
+        filterSuppliers();
+    }
+    
+    // Event listeners
+    countryFilter.addEventListener('change', filterSuppliers);
+    stateFilter.addEventListener('change', filterSuppliers);
+    searchInput.addEventListener('input', filterSuppliers);
+    clearFiltersBtn.addEventListener('click', clearFilters);
+});
+</script>
 {% endblock %}

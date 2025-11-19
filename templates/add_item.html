@@ -69,7 +69,8 @@
                         <div class="col-md-4 mb-3">
                             <label for="unit_price" class="form-label">Unit Price ($) <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" id="unit_price" name="unit_price" required 
-                                   min="0" step="0.01" placeholder="0.00" readonly>
+                                   min="0" step="0.01" placeholder="0.00" readonly 
+                                   style="background-color: #e9ecef; color: #212529; cursor: not-allowed;">
                             <div class="form-text">Auto-populated from SKU</div>
                         </div>
 
@@ -225,6 +226,100 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize total value calculation
     updateTotalValue();
+
+    // AI Forecast Button Handler
+    const getForecastBtn = document.getElementById('getForecastBtn');
+    const forecastSuggestion = document.getElementById('forecastSuggestion');
+    const suggestedQuantitySpan = document.getElementById('suggestedQuantity');
+    const suggestionReasoningSpan = document.getElementById('suggestionReasoning');
+    const applySuggestionBtn = document.getElementById('applySuggestion');
+
+    getForecastBtn.addEventListener('click', function() {
+        const warehouseId = document.getElementById('warehouse_id').value;
+        const categoryId = document.getElementById('category_id').value;
+        const skuId = document.getElementById('sku_id').value;
+        const minimumStock = parseInt(document.getElementById('minimum_stock').value) || 0;
+        const newQuantity = parseInt(quantityInput.value) || 0;
+
+        if (!warehouseId) {
+            alert('Please select a warehouse first.');
+            return;
+        }
+
+        if (!categoryId) {
+            alert('Please select a category first.');
+            return;
+        }
+
+        if (!skuId) {
+            alert('Please select a product (SKU) first.');
+            return;
+        }
+
+        // Show loading state
+        getForecastBtn.disabled = true;
+        getForecastBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        // First, get current inventory for this SKU at this warehouse
+        const inventoryParams = new URLSearchParams({
+            sku_id: skuId,
+            warehouse_id: warehouseId
+        });
+
+        fetch(`/api/current-inventory?${inventoryParams}`)
+            .then(response => response.json())
+            .then(inventoryData => {
+                if (inventoryData.error) {
+                    throw new Error(inventoryData.error);
+                }
+
+                const currentQuantity = inventoryData.current_quantity || 0;
+
+                // Now call the demand forecast API with the actual current inventory
+                const params = new URLSearchParams({
+                    warehouse_id: warehouseId,
+                    category_id: categoryId,
+                    sku_id: skuId,
+                    current_quantity: currentQuantity,
+                    minimum_stock: minimumStock,
+                    new_quantity: newQuantity
+                });
+
+                return fetch(`/api/demand-forecast?${params}`);
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                // Display the suggestion
+                suggestedQuantitySpan.textContent = data.suggested_quantity;
+                suggestionReasoningSpan.textContent = data.reasoning;
+                forecastSuggestion.style.display = 'block';
+
+                // Store the suggested value for the apply button
+                applySuggestionBtn.dataset.suggestedQuantity = data.suggested_quantity;
+            })
+            .catch(error => {
+                console.error('Error fetching forecast:', error);
+                alert('Failed to get AI recommendation. Please try again.');
+            })
+            .finally(() => {
+                // Reset button state
+                getForecastBtn.disabled = false;
+                getForecastBtn.innerHTML = '<i class="fas fa-magic"></i>';
+            });
+    });
+
+    // Apply suggestion button handler
+    applySuggestionBtn.addEventListener('click', function() {
+        const suggestedQty = parseInt(this.dataset.suggestedQuantity) || 0;
+        quantityInput.value = suggestedQty;
+        updateTotalValue();
+        forecastSuggestion.style.display = 'none';
+    });
 });
 </script>
 {% endblock %}

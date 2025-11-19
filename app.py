@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 import psycopg
 import os
 import time
@@ -87,6 +87,46 @@ def get_supplier_table_name():
 
 def get_demand_table_name():
     return os.getenv("POSTGRES_DEMAND_TABLE", "inventory_demand_forecast")
+
+def generate_oms_order_confirmation(sku_code, item_name, quantity, unit_price, warehouse_name, supplier_name):
+    """Generate realistic OMS order confirmation details."""
+    import random
+    from datetime import timedelta
+    
+    # Generate realistic order ID (format: ORD-YYYYMMDD-XXXXX)
+    order_date = datetime.now()
+    order_id = f"ORD-{order_date.strftime('%Y%m%d')}-{random.randint(10000, 99999)}"
+    
+    # Generate tracking number
+    tracking_number = f"TRK-{random.randint(1000000000, 9999999999)}"
+    
+    # Calculate ETA (3-7 business days from now)
+    eta_days = random.randint(3, 7)
+    eta_date = order_date + timedelta(days=eta_days)
+    
+    # Calculate total value
+    total_value = quantity * unit_price
+    
+    # Generate confirmation details
+    confirmation = {
+        'order_id': order_id,
+        'tracking_number': tracking_number,
+        'order_date': order_date.strftime('%B %d, %Y at %I:%M %p'),
+        'eta_date': eta_date.strftime('%B %d, %Y'),
+        'eta_days': eta_days,
+        'sku_code': sku_code,
+        'item_name': item_name,
+        'quantity': quantity,
+        'unit_price': unit_price,
+        'total_value': total_value,
+        'warehouse': warehouse_name or 'Default Warehouse',
+        'supplier': supplier_name or 'Direct Order',
+        'status': 'CONFIRMED',
+        'payment_method': 'Net 30 Terms',
+        'shipping_method': 'Standard Ground' if total_value < 1000 else 'Priority Shipping'
+    }
+    
+    return confirmation
 
 def get_sku_table_name():
     return os.getenv("POSTGRES_SKU_TABLE", "inventory_sku")
@@ -418,6 +458,7 @@ def reset_all_data():
     try:
         schema_name = get_schema_name()
         table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+        sku_table_name = get_sku_table_name()
         category_table_name = get_category_table_name()
         warehouse_table_name = get_warehouse_table_name()
         supplier_table_name = get_supplier_table_name()
@@ -425,12 +466,14 @@ def reset_all_data():
         
         print("🔄 Starting complete data reset...")
         
-        # Step 1: Clear all data in separate transactions to avoid deadlocks
+        # Step 1: Clear all data in correct order (respecting foreign key constraints)
+        # Delete child tables first, then parent tables
         tables_to_clear = [
-            (table_name, "inventory_items"),
-            (supplier_table_name, "inventory_supplier"), 
-            (warehouse_table_name, "inventory_warehouse"),
-            (category_table_name, "inventory_category")
+            (table_name, "inventory_items"),  # References: sku, warehouse, supplier
+            (sku_table_name, "inventory_sku"),  # References: category
+            (category_table_name, "inventory_category"),  # No FK dependencies
+            (warehouse_table_name, "inventory_warehouse"),  # No FK dependencies
+            (supplier_table_name, "inventory_supplier")  # No FK dependencies
         ]
         
         for table, display_name in tables_to_clear:
@@ -457,6 +500,7 @@ def reset_all_data():
         print("🔄 Resetting identity sequences...")
         sequence_mapping = {
             table_name: f"{table_name}_id_seq",
+            sku_table_name: f"{sku_table_name}_sku_id_seq",
             category_table_name: f"{category_table_name}_category_id_seq", 
             warehouse_table_name: f"{warehouse_table_name}_warehouse_id_seq",
             supplier_table_name: f"{supplier_table_name}_supplier_id_seq"
@@ -1064,6 +1108,62 @@ def get_skus():
     except Exception as e:
         print(f"Get SKUs error: {e}")
         return []
+
+def get_sku_details(sku_id):
+    """Get SKU details by ID."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                sku_table = get_sku_table_name()
+                category_table = get_category_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT s.sku_id, s.sku_code, s.item_name, s.category_id, c.category_name, s.description, s.unit_price
+                    FROM {}.{} s
+                    LEFT JOIN {}.{} c ON s.category_id = c.category_id
+                    WHERE s.sku_id = %s
+                """).format(
+                    sql.Identifier(schema), sql.Identifier(sku_table),
+                    sql.Identifier(schema), sql.Identifier(category_table)
+                ), (sku_id,))
+                return cur.fetchone()
+    except Exception as e:
+        print(f"Get SKU details error: {e}")
+        return None
+
+def get_warehouse_details(warehouse_id):
+    """Get warehouse details by ID."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                warehouse_table = get_warehouse_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT warehouse_id, warehouse_name, address, city, state, country
+                    FROM {}.{}
+                    WHERE warehouse_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(warehouse_table)), (warehouse_id,))
+                return cur.fetchone()
+    except Exception as e:
+        print(f"Get warehouse details error: {e}")
+        return None
+
+def get_supplier_details(supplier_id):
+    """Get supplier details by ID."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                supplier_table = get_supplier_table_name()
+                cur.execute(sql.SQL("""
+                    SELECT supplier_id, supplier_name, contact_person, email, phone
+                    FROM {}.{}
+                    WHERE supplier_id = %s
+                """).format(sql.Identifier(schema), sql.Identifier(supplier_table)), (supplier_id,))
+                return cur.fetchone()
+    except Exception as e:
+        print(f"Get supplier details error: {e}")
+        return None
 
 def get_skus_by_category(category_id):
     """Get all SKUs for a specific category."""
@@ -1711,8 +1811,11 @@ def index():
     # Calculate total inventory value
     total_value = sum(item[6] * item[7] for item in items) if items else 0
     
+    # Check for OMS confirmation in session
+    oms_confirmation = session.pop('oms_confirmation', None)
+    
     return render_template('index.html', items=items, low_stock_count=len(low_stock_items), 
-                         warehouses=warehouses, total_value=total_value)
+                         warehouses=warehouses, total_value=total_value, oms_confirmation=oms_confirmation)
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_item_route():
@@ -1727,6 +1830,25 @@ def add_item_route():
         
         if sku_id and quantity is not None and unit_price is not None:
             if add_inventory_item(sku_id, quantity, unit_price, warehouse_id, supplier_id, None, minimum_stock):
+                # Get details for OMS confirmation
+                sku_details = get_sku_details(sku_id)
+                warehouse_details = get_warehouse_details(warehouse_id) if warehouse_id else None
+                supplier_details = get_supplier_details(supplier_id) if supplier_id else None
+                
+                # Generate OMS order confirmation
+                if sku_details:
+                    sku_code = sku_details[1]
+                    item_name = sku_details[2]
+                    warehouse_name = warehouse_details[1] if warehouse_details else None
+                    supplier_name = supplier_details[1] if supplier_details else None
+                    
+                    oms_confirmation = generate_oms_order_confirmation(
+                        sku_code, item_name, quantity, unit_price, warehouse_name, supplier_name
+                    )
+                    
+                    # Store in session to show on index page
+                    session['oms_confirmation'] = oms_confirmation
+                
                 flash('Item added successfully!', 'success')
             else:
                 flash('Failed to add item.', 'error')
@@ -1953,6 +2075,44 @@ def api_dashboard_config():
         'public_url': get_dashboard_public_url(),
         'configured': get_dashboard_embed_url() is not None
     })
+
+@app.route('/api/current-inventory')
+def api_current_inventory():
+    """API endpoint to get current inventory for a SKU at a warehouse."""
+    warehouse_id = request.args.get('warehouse_id', type=int)
+    sku_id = request.args.get('sku_id', type=int)
+    
+    if not sku_id:
+        return jsonify({'error': 'sku_id is required'}), 400
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                schema = get_schema_name()
+                table_name = os.getenv("POSTGRES_TABLE", "inventory_items")
+                
+                # Query to get current total inventory for this SKU at this warehouse
+                if warehouse_id:
+                    cur.execute(sql.SQL("""
+                        SELECT COALESCE(SUM(quantity), 0) as total_quantity
+                        FROM {}.{}
+                        WHERE sku_id = %s AND warehouse_id = %s
+                    """).format(sql.Identifier(schema), sql.Identifier(table_name)), (sku_id, warehouse_id))
+                else:
+                    # If no warehouse specified, get total across all warehouses
+                    cur.execute(sql.SQL("""
+                        SELECT COALESCE(SUM(quantity), 0) as total_quantity
+                        FROM {}.{}
+                        WHERE sku_id = %s
+                    """).format(sql.Identifier(schema), sql.Identifier(table_name)), (sku_id,))
+                
+                result = cur.fetchone()
+                current_quantity = int(result[0]) if result else 0
+                
+                return jsonify({'current_quantity': current_quantity})
+    except Exception as e:
+        print(f"Error getting current inventory: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/demand-forecast')
 def api_demand_forecast():

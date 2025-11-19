@@ -11,9 +11,37 @@
 </div>
 
 {% if skus %}
+    <!-- Filter Section -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="categoryFilter" class="form-label">
+                        <i class="fas fa-filter"></i> Filter by Category
+                    </label>
+                    <select class="form-select" id="categoryFilter">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="searchInput" class="form-label">
+                        <i class="fas fa-search"></i> Search SKU
+                    </label>
+                    <input type="text" class="form-control" id="searchInput" placeholder="Search by SKU code or name...">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label d-block">&nbsp;</label>
+                    <button class="btn btn-outline-secondary" id="clearFilters">
+                        <i class="fas fa-undo"></i> Clear Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         {% for sku in skus %}
-        <div class="col-md-6 col-lg-4 mb-3">
+        <div class="col-md-6 col-lg-4 mb-3 sku-card" data-category="{{ sku[4] }}" data-sku-code="{{ sku[1] }}" data-sku-name="{{ sku[2] }}">
             <div class="card h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
@@ -59,5 +87,86 @@
         </a>
     </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const categoryFilter = document.getElementById('categoryFilter');
+    const searchInput = document.getElementById('searchInput');
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    const skuCards = document.querySelectorAll('.sku-card');
+    
+    // Populate category filter with unique categories
+    const categories = new Set();
+    skuCards.forEach(card => {
+        const category = card.dataset.category;
+        if (category) categories.add(category);
+    });
+    
+    Array.from(categories).sort().forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categoryFilter.appendChild(option);
+    });
+    
+    // Filter function
+    function filterSKUs() {
+        const selectedCategory = categoryFilter.value.toLowerCase();
+        const searchTerm = searchInput.value.toLowerCase();
+        
+        let visibleCount = 0;
+        
+        skuCards.forEach(card => {
+            const category = card.dataset.category.toLowerCase();
+            const skuCode = card.dataset.skuCode.toLowerCase();
+            const skuName = card.dataset.skuName.toLowerCase();
+            
+            const matchesCategory = !selectedCategory || category === selectedCategory;
+            const matchesSearch = !searchTerm || skuCode.includes(searchTerm) || skuName.includes(searchTerm);
+            
+            if (matchesCategory && matchesSearch) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        // Show "no results" message if needed
+        showNoResultsMessage(visibleCount === 0);
+    }
+    
+    function showNoResultsMessage(show) {
+        let noResultsMsg = document.getElementById('noResultsMessage');
+        if (show && !noResultsMsg) {
+            noResultsMsg = document.createElement('div');
+            noResultsMsg.id = 'noResultsMessage';
+            noResultsMsg.className = 'col-12 text-center py-5';
+            noResultsMsg.innerHTML = `
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No SKUs Found</h4>
+                <p class="text-muted">Try adjusting your filters.</p>
+            `;
+            document.querySelector('.row').appendChild(noResultsMsg);
+        } else if (!show && noResultsMsg) {
+            noResultsMsg.remove();
+        }
+    }
+    
+    // Clear filters
+    function clearFilters() {
+        categoryFilter.value = '';
+        searchInput.value = '';
+        filterSKUs();
+    }
+    
+    // Event listeners
+    categoryFilter.addEventListener('change', filterSKUs);
+    searchInput.addEventListener('input', filterSKUs);
+    clearFiltersBtn.addEventListener('click', clearFilters);
+});
+</script>
 {% endblock %}
 
