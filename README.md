@@ -47,7 +47,7 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 
 ## Quick Start
 
-### Prerequisites
+#### Prerequisites
 
 #### Required:
 - **Python 3.9+** (recommended: 3.10 or newer)
@@ -65,7 +65,8 @@ This allows for analytics to be performed at NRT for transactional data. And thi
   - PyYAML 6.0+
 - **Databricks Secret Scope** for storing the Flask secret key
 
-#### Steps:
+### Steps:
+- Import the notebooks folder to a Databricks Workspace. Ensure the folder hierarachy is maintained. Or, clone this repo on the Databricks workspace.
 - Set the config variables in "/notebooks/0 - SETUP/0 - Setup.ipynb"
 - Start running the notebooks under the "/notebooks/1 - DEPLOY ASSETS/" and the "/notebooks/1 - DEMAND FORECASTING/" folders in the respective order.
 - These notebooks are self explanatory.  
