@@ -76,25 +76,27 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 
 ### Inventory Management
 - **Add/Edit/Delete Items**: Full CRUD operations for inventory items
+- **SKU Management**: Manage product SKUs (Stock Keeping Units) with pricing and descriptions
 - **Category Management**: Organize inventory with custom categories
 - **Warehouse Management**: Track items across multiple warehouse locations with geographic coordinates
 - **Supplier Management**: Maintain supplier information including contact details and geographic data
 - **Low Stock Alerts**: Automatically identify items below minimum stock levels
 - **Bulk CSV Upload**: Add multiple items at once with comprehensive validation
-- **Search & Filter**: Quickly find items across your inventory
+- **Search & Filter**: Quickly find items across your inventory with advanced filtering by category, location, and status
 
 ### AI-Powered Demand Forecasting
 - **Real-Time Predictions**: Get AI-powered demand forecasts for the next 90 days
-- **Smart Inventory Suggestions**: Receive intelligent recommendations on optimal stock levels
-- **Model Serving Integration**: Connects to Databricks Model Serving endpoints for predictions
+- **Smart Inventory Suggestions**: Receive intelligent recommendations on optimal stock levels based on current inventory
+- **Model Serving Integration**: Connects to Databricks Model Serving endpoints for predictions using warehouse, category, and SKU data
 - **Safety Stock Calculation**: Automatically calculates safety stock (10% buffer) based on forecasts
 - **Fallback Logic**: Uses minimum stock thresholds when model endpoint is unavailable
-- **Interactive Feedback**: Real-time suggestions during item creation and editing
+- **Interactive Feedback**: Real-time suggestions during item creation and editing with detailed reasoning
 
 ### Dashboard & Analytics
 - **Embedded Dashboards**: View live Databricks AI/BI dashboards directly in the app
 - **Real-Time Metrics**: Monitor inventory value, stock levels, and trends
 - **Visual Analytics**: Interactive charts and graphs for better decision-making
+- **OMS Integration**: Order Management System confirmation with detailed order tracking and delivery information
 
 ### Data Management
 - **Sample Data Loading**: Automatically populate with realistic sample data
@@ -125,16 +127,6 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 - `warehouse_id` (integer, must exist in warehouses table)
 - `minimum_stock` (integer ≥ 0)
 
-## API Endpoints
-
-The application provides RESTful API endpoints for programmatic access:
-
-- **`GET /api/items`**: Retrieve all inventory items as JSON
-- **`GET /api/token-status`**: Check OAuth token validity
-- **`GET /api/dashboard-config`**: Get dashboard configuration status
-- **`GET /api/demand-forecast`**: Get AI-powered demand forecast suggestions
-  - Query parameters: `warehouse_id`, `category_id`, `item_name`, `current_quantity`, `minimum_stock`, `new_quantity`
-- **`POST /api/reset-data`**: Reset all data and identity sequences (preserves demand forecast table)
 
 ## Notebooks
 
@@ -157,6 +149,7 @@ The application supports several environment variables for flexible data managem
 - **`FORCE_DATA_RESET`**: Set to `"true"` to delete all data and reset identity sequences on startup (excludes demand forecast table)
 - **`LOAD_SAMPLE_DATA`**: Set to `"false"` to disable automatic sample data loading (default: `"true"`)
 - **`DEBUG_SQL`**: Set to `"true"` to show SQL content being executed for debugging (default: `"false"`)
+- **`POSTGRES_SKU_TABLE`**: Customize SKU table name (default: `inventory_sku`)
 - **`POSTGRES_CATEGORY_TABLE`**: Customize category table name (default: `inventory_category`)
 - **`POSTGRES_WAREHOUSE_TABLE`**: Customize warehouse table name (default: `inventory_warehouse`)
 - **`POSTGRES_SUPPLIER_TABLE`**: Customize supplier table name (default: `inventory_supplier`)
@@ -177,7 +170,8 @@ The application supports several environment variables for flexible data managem
 
 The repository includes SQL scripts for populating tables with realistic data in the `data/` folder:
 
-- **`data/category_data.sql`**: 40+ realistic product categories across various industries
+- **`data/category_data.sql`**: 10 realistic product categories across various industries
+- **`data/sku_data.sql`**: 50 product SKUs with pricing and descriptions
 - **`data/warehouse_data.sql`**: 26 strategically located warehouses across North America
 - **`data/supplier_data.sql`**: 30+ suppliers with geographic coordinates for map visualization
 - **`data/inventory_items_data.sql`**: 100+ realistic retail inventory items across all categories
@@ -186,7 +180,8 @@ The repository includes SQL scripts for populating tables with realistic data in
 
 ```
 data/
-├── category_data.sql          # Product categories (TPCDS-aligned)
+├── category_data.sql          # Product categories
+├── sku_data.sql               # Product SKUs with pricing
 ├── warehouse_data.sql         # Warehouse locations with coordinates
 ├── supplier_data.sql          # Supplier information with geographic data
 ├── inventory_items_data.sql   # Complete inventory items dataset
@@ -206,25 +201,27 @@ data/
 -- 1. Load categories first (no dependencies)
 \i data/category_data.sql
 
--- 2. Load warehouses (no dependencies)
+-- 2. Load SKUs (depends on categories)
+\i data/sku_data.sql
+
+-- 3. Load warehouses (no dependencies)
 \i data/warehouse_data.sql
 
--- 3. Load suppliers (no dependencies)
+-- 4. Load suppliers (no dependencies)
 \i data/supplier_data.sql
 
--- 4. Load inventory items (depends on categories, warehouses, suppliers)
+-- 5. Load inventory items (depends on SKUs, warehouses, suppliers)
 \i data/inventory_items_data.sql
 ```
 
 ### Using Sample Data
 
 The application automatically loads comprehensive sample data on first startup (when tables are empty):
-- 40+ realistic product categories across various industries
+- 10 realistic product categories across various industries
+- 50 product SKUs with detailed pricing and descriptions
 - 26 strategically located warehouses across North America with geographic coordinates
 - 30+ suppliers with complete contact information and location data
 - 100+ inventory items with realistic pricing and stock levels
-
-All sample data is TPCDS-aligned for industry-standard analytics and testing.
 
 ## Setting Up Demand Forecasting
 
@@ -281,16 +278,18 @@ The forecasts consider:
 The application uses a relational schema with the following tables:
 
 ### Core Tables
-- **`inventory_items`**: Main inventory items table with foreign keys to categories, warehouses, and suppliers
+- **`inventory_items`**: Main inventory items table with foreign keys to SKUs, warehouses, and suppliers
+- **`inventory_sku`**: Product SKUs with pricing, descriptions, and category associations
 - **`inventory_category`**: Product categories for organizing items
 - **`inventory_warehouse`**: Warehouse locations with geographic data
 - **`inventory_supplier`**: Supplier information for procurement tracking
 
 ### Relationships
-- Each inventory item belongs to one category (required)
+- Each inventory item references one SKU (required)
+- Each SKU belongs to one category (required)
 - Each inventory item can be assigned to one warehouse (optional)
 - Each inventory item can be linked to one supplier (optional)
-- Demand forecasts are linked to warehouses and categories for prediction accuracy
+- Demand forecasts are linked to warehouses, categories, and SKUs for prediction accuracy
 
 ### Foreign Table Sync
 All tables are synced from Lakebase to Unity Catalog as foreign tables at near-real-time latency, enabling:
@@ -303,11 +302,18 @@ All tables are synced from Lakebase to Unity Catalog as foreign tables at near-r
 
 The application provides comprehensive management interfaces for all inventory entities:
 
+### SKU Management
+- Create, edit, and delete product SKUs
+- Define SKU codes, item names, descriptions, and unit pricing
+- Associate SKUs with product categories
+- Filter SKUs by category with real-time search
+- SKUs cannot be deleted if they have associated inventory items
+
 ### Categories Management
 - Create, edit, and delete product categories
 - Organize inventory items by category for better reporting
 - View item counts per category
-- Categories cannot be deleted if they have associated items
+- Categories cannot be deleted if they have associated SKUs or items
 
 ### Warehouses Management
 - Manage multiple warehouse locations
@@ -316,6 +322,7 @@ The application provides comprehensive management interfaces for all inventory e
   - Latitude and longitude coordinates for mapping
   - Contact person, phone, and email
 - Associate inventory items with specific warehouses
+- Filter warehouses by country and state/province
 - Visualize warehouse locations on maps (via embedded dashboards)
 
 ### Suppliers Management
@@ -325,6 +332,7 @@ The application provides comprehensive management interfaces for all inventory e
   - Website URL
   - Tax ID and payment terms
 - Link inventory items to suppliers for procurement tracking
+- Filter suppliers by country and state/province with search
 - Suppliers with associated items require confirmation before deletion
 
 ## Important Notes
