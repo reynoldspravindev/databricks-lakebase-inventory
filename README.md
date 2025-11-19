@@ -22,7 +22,7 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 
 - **Modern User Experience**: Enjoy a responsive, intuitive web interface with bulk CSV upload, real-time validation, and analytics at your fingertips. The app supports template downloads, progress tracking, and detailed error feedback for seamless data onboarding.
 
-- **AI-Powered Demand Forecasting**: Leverage Databricks Model Serving with XGBoost models to predict inventory needs for the next 90 days. The system intelligently recommends optimal stock levels based on warehouse location, product category, and historical sales patterns, with automatic safety stock calculations and fallback logic for continuous operation.
+- **AI-Powered Demand Forecasting**: Leverage Databricks Model Serving to predict inventory needs for the next 90 days. The system intelligently recommends optimal stock levels based on warehouse location, product category, and historical sales patterns, with automatic safety stock calculations and fallback logic for continuous operation.
 
 ## Technology Stack
 
@@ -72,88 +72,108 @@ This allows for analytics to be performed at NRT for transactional data. And thi
 
 
 
-## Core Features
+## Databricks Platform Integration
 
-### Inventory Management
-- **Add/Edit/Delete Items**: Full CRUD operations for inventory items
-- **SKU Management**: Manage product SKUs (Stock Keeping Units) with pricing and descriptions
-- **Category Management**: Organize inventory with custom categories
-- **Warehouse Management**: Track items across multiple warehouse locations with geographic coordinates
-- **Supplier Management**: Maintain supplier information including contact details and geographic data
-- **Low Stock Alerts**: Automatically identify items below minimum stock levels
-- **Bulk CSV Upload**: Add multiple items at once with comprehensive validation
-- **Search & Filter**: Quickly find items across your inventory with advanced filtering by category, location, and status
+### Lakebase (Managed Postgres) - Transactional Data Layer
+This application showcases **Databricks Lakebase** as the operational database for transactional inventory management:
+- **Fully Managed PostgreSQL**: No infrastructure management, automatic backups, high availability
+- **Separation of Storage & Compute**: Leverage Databricks' cloud-native architecture
+- **Near Real-Time Sync**: Automatic bi-directional sync between Lakebase and Unity Catalog as foreign tables
+- **ACID Compliance**: Full transactional consistency for inventory operations
+- **Native OAuth Integration**: Seamless authentication with Databricks workspace identity
 
-### AI-Powered Demand Forecasting
-- **Real-Time Predictions**: Get AI-powered demand forecasts for the next 90 days
-- **Smart Inventory Suggestions**: Receive intelligent recommendations on optimal stock levels based on current inventory
-- **Model Serving Integration**: Connects to Databricks Model Serving endpoints for predictions using warehouse, category, and SKU data
-- **Safety Stock Calculation**: Automatically calculates safety stock (10% buffer) based on forecasts
-- **Fallback Logic**: Uses minimum stock thresholds when model endpoint is unavailable
-- **Interactive Feedback**: Real-time suggestions during item creation and editing with detailed reasoning
+### Unity Catalog - Data Governance
+All inventory data is governed through **Unity Catalog**, providing enterprise-grade capabilities:
+- **Centralized Governance**: Single source of truth for both transactional (Lakebase) and analytical (Delta Lake) data
+- **Fine-Grained Access Control**: Row and column-level security across all tables
+- **Complete Data Lineage**: Track data flow from transactional operations to analytics
+- **Audit Trails**: Full visibility into data access and modifications
+- **Dynamic Data Masking**: Protect sensitive information while maintaining usability
 
-### Dashboard & Analytics
-- **Embedded Dashboards**: View live Databricks AI/BI dashboards directly in the app
-- **Real-Time Metrics**: Monitor inventory value, stock levels, and trends
-- **Visual Analytics**: Interactive charts and graphs for better decision-making
-- **OMS Integration**: Order Management System confirmation with detailed order tracking and delivery information
+### Databricks Model Serving - AI/ML Integration
+Leverage **Databricks Model Serving** for intelligent inventory forecasting:
+- **XGBoost Models**: Pre-trained demand forecasting models for 90-day predictions
+- **Serverless Inference**: Auto-scaling model endpoints with minimal latency
+- **Real-Time Predictions**: Instant inventory recommendations during data entry
+- **MLflow Integration**: Model versioning, tracking, and governance
+- **Fallback Logic**: Graceful degradation when endpoints are unavailable
 
-### Data Management
-- **Sample Data Loading**: Automatically populate with realistic sample data
-- **Data Reset API**: Programmatically reset data while preserving forecast history
-- **Foreign Table Sync**: Bi-directional sync between Lakebase and Unity Catalog
-- **Comprehensive SQL Scripts**: Pre-built scripts for categories, warehouses, suppliers, and items
+### Lakehouse Apps - Application Hosting
+Deploy and manage the entire application within **Databricks Lakehouse Apps**:
+- **Native Hosting**: Run web applications directly in Databricks workspace
+- **Auto-Scaling Compute**: Dynamic resource allocation based on demand
+- **Secret Management**: Secure credential storage with Databricks Secret Scope
+- **Embedded Analytics**: Direct integration with AI/BI Dashboards
+- **OAuth Security**: Workspace-native authentication and authorization
 
-## CSV Upload Features
+### AI/BI Dashboards - Embedded Analytics
+**Databricks AI/BI Dashboards** provide real-time insights within the application:
+- **Live Data Connectivity**: Direct queries to Lakebase foreign tables
+- **Interactive Visualizations**: Drill-down capabilities and filtering
+- **Secure Embedding**: Token-based dashboard embedding with auto-refresh
+- **Unified Analytics**: Single platform for operational and analytical workloads
 
-- **Bulk Upload**: Add multiple items at once via CSV
-- **Data Validation**: Comprehensive validation with detailed error reporting
-- **Template Download**: Get the correct CSV format
-- **Progress Tracking**: Visual upload progress and results
-- **Error Handling**: Skip invalid rows, process valid ones
-- **File Size Limit**: 16MB maximum file size
+## Application Features
 
-### CSV Format Requirements:
+This reference application demonstrates key inventory management capabilities powered by Databricks:
 
-#### Required Columns:
-- `item_name` (max 100 characters)
-- `category_id` (integer, must exist in categories table) 
-- `quantity` (integer ≥ 0)
-- `unit_price` (decimal ≥ 0)
-
-#### Optional Columns:
-- `description`
-- `supplier_id` (integer, must exist in suppliers table)
-- `warehouse_id` (integer, must exist in warehouses table)
-- `minimum_stock` (integer ≥ 0)
+- **Transactional CRUD Operations**: Full inventory lifecycle management backed by Lakebase
+- **SKU & Category Management**: Organize products with multi-level hierarchies
+- **Multi-Warehouse Support**: Track inventory across locations with geographic data
+- **Supplier Management**: Maintain procurement relationships
+- **Bulk Data Import**: CSV uploads with validation and error handling
+- **Low Stock Alerts**: Automated threshold monitoring
+- **AI-Powered Recommendations**: Model Serving integration for demand forecasting
+- **Real-Time Analytics**: Embedded dashboards for operational insights
+- **Order Management System**: Complete order tracking with OMS integration
 
 
-## Notebooks
+## API Endpoints
 
-The repository includes Databricks notebooks for setup and advanced features:
+The application provides RESTful API endpoints demonstrating programmatic access to Lakebase data:
 
-### Setup Notebooks
-- **`0 - Setup.ipynb`**: Initial setup and configuration
-- **`1 - Deploy Assets.ipynb`**: Deploy database assets and configure resources
+- **`GET /api/items`**: Retrieve all inventory items as JSON
+- **`GET /api/skus-by-category/<category_id>`**: Retrieve SKUs filtered by category
+- **`GET /api/current-inventory`**: Get current inventory quantity for a SKU at a warehouse
+- **`GET /api/token-status`**: Check OAuth token validity
+- **`GET /api/dashboard-config`**: Get dashboard configuration status
+- **`GET /api/demand-forecast`**: Get AI-powered demand forecast suggestions from Model Serving
+- **`POST /api/reset-data`**: Reset all data and identity sequences
 
-### Demand Forecasting Notebooks
-- **`2.1 - Generate Synthetic Sales Data.ipynb`**: Generate realistic sales data for model training
-- **`2.2 - Demand Forecasting.ipynb`**: Train and deploy demand forecasting model to Model Serving endpoint
+## Databricks Notebooks
 
-## Data Management
+The repository includes notebooks that demonstrate Databricks workflows and ML lifecycle:
 
-### Environment Variables for Data Control
+### Setup & Deployment (`notebooks/0 - SETUP/`, `notebooks/1 - DEPLOY ASSETS/`)
+- Configure Databricks resources (Lakebase, Unity Catalog, Secret Scope)
+- Deploy database schema and initialize foreign table sync
+- Set up app permissions and resource grants
 
-The application supports several environment variables for flexible data management:
+### AI/ML Workflow (`notebooks/2 - DEMAND FORECASTING/`)
+- Generate synthetic sales data for model training
+- Train XGBoost forecasting models using Databricks ML Runtime
+- Register models in MLflow and deploy to Model Serving endpoints
+- Demonstrate end-to-end ML lifecycle on the Lakehouse Platform
 
-- **`FORCE_DATA_RESET`**: Set to `"true"` to delete all data and reset identity sequences on startup (excludes demand forecast table)
-- **`LOAD_SAMPLE_DATA`**: Set to `"false"` to disable automatic sample data loading (default: `"true"`)
-- **`DEBUG_SQL`**: Set to `"true"` to show SQL content being executed for debugging (default: `"false"`)
-- **`POSTGRES_SKU_TABLE`**: Customize SKU table name (default: `inventory_sku`)
-- **`POSTGRES_CATEGORY_TABLE`**: Customize category table name (default: `inventory_category`)
-- **`POSTGRES_WAREHOUSE_TABLE`**: Customize warehouse table name (default: `inventory_warehouse`)
-- **`POSTGRES_SUPPLIER_TABLE`**: Customize supplier table name (default: `inventory_supplier`)
-- **`MODEL_ENDPOINT_NAME`**: Databricks Model Serving endpoint name for demand forecasting (optional)
+## Configuration
+
+### Databricks Platform Configuration
+
+Configure the application to leverage Databricks services:
+
+- **`DATABRICKS_HOST`**: Workspace URL for API access and dashboard embedding
+- **`POSTGRES_HOST`**: Lakebase connection endpoint
+- **`POSTGRES_SCHEMA`**: Schema name in Lakebase (default: `inventory_app`)
+- **`SECRET_SCOPE`**: Databricks Secret Scope name for secure credential storage
+- **`MODEL_ENDPOINT_NAME`**: Model Serving endpoint for demand forecasting (optional)
+- **`DASHBOARD_ID`**: AI/BI Dashboard ID for embedded analytics (optional)
+
+### Data Management Variables
+
+- **`FORCE_DATA_RESET`**: Reset all data on startup (preserves ML forecast history)
+- **`LOAD_SAMPLE_DATA`**: Auto-populate sample data (default: `"true"`)
+- **`DEBUG_SQL`**: Enable SQL query logging for debugging
+- **`POSTGRES_SKU_TABLE`**, **`POSTGRES_CATEGORY_TABLE`**, etc.: Customize table names
 
 ### Data Reset Options
 
@@ -223,117 +243,98 @@ The application automatically loads comprehensive sample data on first startup (
 - 30+ suppliers with complete contact information and location data
 - 100+ inventory items with realistic pricing and stock levels
 
-## Setting Up Demand Forecasting
+## Databricks Model Serving Integration
 
-The demand forecasting feature uses Databricks Model Serving to provide AI-powered inventory recommendations. To enable this feature:
+This application demonstrates how **Databricks Model Serving** provides real-time AI predictions within operational workflows:
 
-### Step 1: Generate Training Data
+### End-to-End ML Lifecycle on Databricks
 
-Use the provided notebook to generate synthetic sales data:
-- Navigate to `notebooks/2 - DEMAND FORECASTING/2.1 - Generate Synthetic Sales Data.ipynb`
-- Run all cells to create historical sales data in your catalog
-- This creates the foundation for training the forecasting model
+1. **Data Generation**: Synthetic sales data created in Delta Lake tables
+2. **Model Training**: XGBoost models trained using Databricks ML Runtime
+3. **MLflow Registry**: Models versioned and tracked in Unity Catalog
+4. **Model Serving**: Auto-scaling serverless endpoints for inference
+5. **Application Integration**: REST API calls from web app for real-time predictions
 
-### Step 2: Train and Deploy the Model
-
-Train and deploy the demand forecasting model:
-- Open `notebooks/2 - DEMAND FORECASTING/2.2 - Demand Forecasting.ipynb`
-- Run all cells to train the XGBoost forecasting model
-- The notebook automatically deploys the model to a Databricks Model Serving endpoint
-- Note the endpoint name (e.g., `demand-forecast-endpoint`)
-
-### Step 3: Configure the Application
-
-Add the model endpoint to your app.yaml or environment variables:
-
-```yaml
-env:
-  - name: MODEL_ENDPOINT_NAME
-    value: "demand-forecast-endpoint"
+### Architecture Flow
+```
+Lakebase (Inventory) → Unity Catalog (Foreign Tables) → Delta Lake (Sales History)
+                                                               ↓
+                                                         Model Training
+                                                               ↓
+                                                         MLflow Registry
+                                                               ↓
+                                                      Model Serving Endpoint
+                                                               ↓
+                                                    Lakehouse App (Predictions)
 ```
 
-Or set as an environment variable:
+### Business Value
+- **Real-Time Intelligence**: AI recommendations during data entry, not after-the-fact
+- **No Infrastructure**: Serverless endpoints scale automatically
+- **Unified Platform**: Training and inference on the same data, no data movement
+- **Governance**: Models governed by Unity Catalog like any other asset
+- **Fallback Logic**: Graceful degradation maintains app functionality
 
-```bash
-export MODEL_ENDPOINT_NAME="demand-forecast-endpoint"
+## Lakebase Schema & Unity Catalog Sync
+
+The application demonstrates a transactional schema in **Lakebase** with automatic sync to **Unity Catalog**:
+
+### Lakebase Tables (Transactional Layer)
+- **`inventory_items`**: Core inventory records with FK relationships
+- **`inventory_sku`**: Product master data with pricing
+- **`inventory_category`**: Product categorization
+- **`inventory_warehouse`**: Location master with geographic coordinates
+- **`inventory_supplier`**: Vendor management
+- **`inventory_demand_forecast`**: ML model predictions (historical)
+
+### Unity Catalog Foreign Tables (Analytical Layer)
+All Lakebase tables are automatically synced to Unity Catalog as **foreign tables**:
+- **Near Real-Time Latency**: Changes in Lakebase appear in Unity Catalog within seconds
+- **Bi-Directional Sync**: Write to Unity Catalog, read from Lakebase (Reverse ETL capability)
+- **Query Federation**: Join transactional data with Delta Lake tables seamlessly
+- **Unified Governance**: Single set of permissions managed through Unity Catalog
+- **Analytics Ready**: Power AI/BI dashboards, ML models, and Databricks workflows with live operational data
+
+This architecture enables true **Lakehouse convergence** - OLTP and OLAP workloads on a single platform.
+
+## Why Databricks for Inventory Management?
+
+This application demonstrates how Databricks unifies traditionally separate systems into a single platform:
+
+### Traditional Architecture (Before Databricks)
 ```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│ PostgreSQL  │────▶│ ETL Pipeline │────▶│ Data Warehouse│
+│  (OLTP)     │     │ (Batch/CDC)  │     │  (Analytics)  │
+└─────────────┘     └──────────────┘     └──────────────┘
+        │                                         │
+        ▼                                         ▼
+   Web App                                   BI Tools
+```
+**Challenges**: Data duplication, latency, complexity, multiple security layers
 
-### How It Works
-
-When enabled, the demand forecasting feature:
-- Predicts demand for the next 90 days (3 months) based on historical sales patterns
-- Calculates safety stock as 10% of forecasted demand
-- Provides intelligent recommendations when adding or editing inventory items
-- Falls back to minimum stock logic if the model endpoint is unavailable or not configured
-- Displays reasoning for all suggestions to help you make informed decisions
-
-The forecasts consider:
-- Warehouse location patterns
-- Product category trends
-- Seasonal variations
-- Historical sales velocity
-
-## Database Schema
-
-The application uses a relational schema with the following tables:
-
-### Core Tables
-- **`inventory_items`**: Main inventory items table with foreign keys to SKUs, warehouses, and suppliers
-- **`inventory_sku`**: Product SKUs with pricing, descriptions, and category associations
-- **`inventory_category`**: Product categories for organizing items
-- **`inventory_warehouse`**: Warehouse locations with geographic data
-- **`inventory_supplier`**: Supplier information for procurement tracking
-
-### Relationships
-- Each inventory item references one SKU (required)
-- Each SKU belongs to one category (required)
-- Each inventory item can be assigned to one warehouse (optional)
-- Each inventory item can be linked to one supplier (optional)
-- Demand forecasts are linked to warehouses, categories, and SKUs for prediction accuracy
-
-### Foreign Table Sync
-All tables are synced from Lakebase to Unity Catalog as foreign tables at near-real-time latency, enabling:
-- Analytics on transactional data
-- Integration with Databricks workflows
-- AI/BI dashboard connectivity
-- Delta Lake integration
-
-## Entity Management
-
-The application provides comprehensive management interfaces for all inventory entities:
-
-### SKU Management
-- Create, edit, and delete product SKUs
-- Define SKU codes, item names, descriptions, and unit pricing
-- Associate SKUs with product categories
-- Filter SKUs by category with real-time search
-- SKUs cannot be deleted if they have associated inventory items
-
-### Categories Management
-- Create, edit, and delete product categories
-- Organize inventory items by category for better reporting
-- View item counts per category
-- Categories cannot be deleted if they have associated SKUs or items
-
-### Warehouses Management
-- Manage multiple warehouse locations
-- Track geographic data including:
-  - Address, city, state, country, county, zip code
-  - Latitude and longitude coordinates for mapping
-  - Contact person, phone, and email
-- Associate inventory items with specific warehouses
-- Filter warehouses by country and state/province
-- Visualize warehouse locations on maps (via embedded dashboards)
-
-### Suppliers Management
-- Maintain supplier database with complete information:
-  - Contact person, email, phone
-  - Full address with geographic coordinates
-  - Website URL
-  - Tax ID and payment terms
-- Link inventory items to suppliers for procurement tracking
-- Filter suppliers by country and state/province with search
-- Suppliers with associated items require confirmation before deletion
+### Lakehouse Architecture (With Databricks)
+```
+┌──────────────────────────────────────────┐
+│         Databricks Lakehouse             │
+│  ┌────────────┐  ┌──────────────────┐   │
+│  │  Lakebase  │◀▶│ Unity Catalog    │   │
+│  │  (OLTP)    │  │ (Foreign Tables) │   │
+│  └────────────┘  └──────────────────┘   │
+│         ▲                  ▲             │
+│         │                  │             │
+│  ┌──────┴──────┐   ┌──────┴─────────┐   │
+│  │ Lakehouse   │   │ AI/BI Dashboards│   │
+│  │    Apps     │   │ Model Serving   │   │
+│  └─────────────┘   └─────────────────┘   │
+└──────────────────────────────────────────┘
+```
+**Benefits**: 
+- **Single Platform**: No separate systems to manage
+- **Real-Time Sync**: Near-instant data availability for analytics
+- **Unified Governance**: One security model via Unity Catalog
+- **AI/ML Ready**: Models train on live operational data
+- **Lower TCO**: No ETL infrastructure, no data duplication
 
 ## Important Notes
 
